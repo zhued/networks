@@ -14,48 +14,58 @@
 #include <strings.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
+// #include <sys/wait.h>
  
 // Get's rid of the buffer so the file is actually servable.
+// Checks whitespace
 #define ISspace(x) isspace((int)(x))
+
+int BUFFER_SIZE = 1024;
 
 
 void listentoRequests(int);
 void send_file(int, const char *);
 int get_line(int, char *, int);
 void handle_filetype(int client, const char *filename);
+void handle_error(int, const char *filename, int error_num);
 
 /*
     Sends file requested. Specifically the picture formats. 
 */
 void send_file(int client, const char *filename){
-    char *sendbuf;
+    char *send_buffer;
     FILE *requested_file;
     long fileLength;
-    printf("Received request for file: %s on socket %d\n\n", filename + 1, client);
+    printf("Received request for file: %s on socket %d\n", filename + 1, client);
   
+    // open file with rb because it isn't just a text file 
     requested_file = fopen(filename, "rb");
-  
+
+    // If no file could be opened, then call 404 error
     if (requested_file == NULL){
-        // error404(client, filename);
-        printf("Received request for file");
+        handle_error(client, filename, 404);
     }
     else {
-        fseek (requested_file, 0, SEEK_END);
+        // Find the size of requested file by streaming it through
+        // then rewinds back to position in order to read again
+        fseek(requested_file, 0, SEEK_END);
         fileLength = ftell(requested_file);
         rewind(requested_file);
     
-    sendbuf = (char*) malloc(sizeof(char)*fileLength);
-    size_t result = fread(sendbuf, 1, fileLength, requested_file);
+    // Set the send buffer to the exact size of the filelength by malloc
+    // Then read the file in with t
+    send_buffer = (char*) malloc(sizeof(char)*fileLength);
+    size_t result = fread(send_buffer, 1, fileLength, requested_file);
     
+    // If result is readable, then handle the filetype and send the result to client
     if (result > 0) {
         handle_filetype(client, filename);
-        send(client, sendbuf, result, 0);   
+        send(client, send_buffer, result, 0);   
     }   
     else { printf("Send error."); exit(1); }
     }
   
-  fclose(requested_file);
+    fclose(requested_file);
 }
 
 /*
@@ -63,24 +73,27 @@ void send_file(int client, const char *filename){
 */
 void handle_filetype(int client, const char *filename)
 {
-    char buf[1024];
+    char buf[BUFFER_SIZE];
     (void)filename;
     const char* filetype;
-    struct stat st; 
     off_t size;
 
-    if (stat(filename, &st) == 0)
-        size = st.st_size;
+    // Find size of the file to set as content length
+    FILE *f = fopen(filename, "r");
+    if (f){
+        fseek(f, 0, SEEK_END);
+        size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+    }
 
+    // Parses the filename, if there is a '.' then take the +1 value
+    // which will be the filetype
     const char *dot = strrchr(filename, '.');
     if(!dot || dot == filename) {
         filetype = "";
     } else {
         filetype = dot + 1;
     }
-
-    printf("%s", filetype);
-    printf("\n");
 
     if(strcmp(filetype, "html") == 0){
         strcpy(buf, "HTTP/1.1 200 OK\r\n");
@@ -120,25 +133,55 @@ void handle_filetype(int client, const char *filename)
     }
 }
 
+void handle_error(int client, const char *filename, int error_num)
+{
+    char buf[1024];
+    if (error_num == 404)
+    {
+        sprintf(buf, "HTTP/1.1 404 NOT FOUND\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "Content-Type: text/html\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "<HTML><TITLE>404 NOT FOUND</TITLE>\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "<BODY><P>HTTP/1.1 404 Not Found: %s \r\n", filename);
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "</BODY></HTML>\r\n");
+        send(client, buf, strlen(buf), 0);
+    }
+}
 
 
 
-
-
-int get_line(int sock, char *buf, int size)
+/**********************************************************************/
+/* Get a line from a socket, whether the line ends in a newline,
+ * carriage return, or a CRLF combination.  Terminates the string read
+ * with a null character.  If no newline indicator is found before the
+ * end of the buffer, the string is terminated with a null.  If any of
+ * the above three line terminators is read, the last character of the
+ * string will be a linefeed and the string will be terminated with a
+ * null character.
+ * Parameters: the socket descriptor
+ *             the buffer to save the data in
+ *             the size of the buffer
+ * Returns: the number of bytes stored (excluding null) */
+/**********************************************************************/
+int get_line(int sock, char *buf, int size_buffer)
 {
     int i = 0;
     char c = '\0';
     int n;
 
-    while ((i < size - 1) && (c != '\n'))
+    while ((i < size_buffer - 1) && (c != '\n'))
     {
         n = recv(sock, &c, 1, 0);
-        /* DEBUG printf("%02X\n", c); */
+        // printf("%02X\n", c);
         if (n > 0){
             if (c == '\r'){
                 n = recv(sock, &c, 1, MSG_PEEK);
-                /* DEBUG printf("%02X\n", c); */
+                //printf("%02X\n", c);
                 if ((n > 0) && (c == '\n'))
                     recv(sock, &c, 1, 0);
                 else
@@ -155,7 +198,7 @@ int get_line(int sock, char *buf, int size)
 }
 
 void listentoRequests(int client){
-    char buf[1024];
+    char buf[BUFFER_SIZE];
     int numchars;
     char method[255];
     char url[255];
@@ -166,6 +209,7 @@ void listentoRequests(int client){
     char *query_string = NULL;
 
     numchars = get_line(client, buf, sizeof(buf));
+    // printf("%d\n", numchars);
     
     i = 0; j = 0;
     while (!ISspace(buf[j]) && (i < sizeof(method) - 1)){
@@ -200,6 +244,15 @@ void listentoRequests(int client){
         }
     }
 
+    // // 400 error handling
+    // if (strcasecmp(method, "POST") == 0)
+    // {
+    //     error400(client, "Invalid Method");
+    // }
+    // // if (strstr(url, ""))
+
+
+
     // Addes the url to the path
     sprintf(path, "www%s", url);
     if (path[strlen(path) - 1] == '/')
@@ -207,7 +260,7 @@ void listentoRequests(int client){
     if (stat(path, &st) == -1) {
         while ((numchars > 0) && strcmp("\n", buf))   //read & discard header 
             numchars = get_line(client, buf, sizeof(buf));
-        not_found(client);
+        handle_error(client, path, 404);
     } else {
         if ((st.st_mode & S_IFMT) == S_IFDIR){
             strcat(path, "/index.html");
@@ -218,32 +271,10 @@ void listentoRequests(int client){
 }
 
 /*
-    Main function that parses wsconf file for the port, then initiates and sets up
-    nessessary sockets, additional threads, and listens for client responces.
+    Initiates and sets up nessessary sockets, additional threads, and listens for 
+    client responces.
 */
-int main() {
-    // Parse through wsconf file and set variables when needed.
-    int port;
-    char line[256];
-    FILE* conf_file = fopen("ws.conf","r");
-    while(fgets(line, sizeof(line), conf_file)){
-        if(line[0] != '#'){
-            char* parse = strtok(line, " ");
-            while (parse){
-                if (strcmp(parse, "Listen") == 0)
-                {
-                    parse = strtok(NULL, " ");
-                    port = atoi(parse);
-                }
-                else{
-                    parse = strtok(NULL, " ");
-                }
-            }
-        }
-    }
-    fclose(conf_file);
-    // End parse
-    
+int open_port(int port) {
     int one = 1, client_request, sock;
     pthread_t newthread;
 
@@ -252,7 +283,6 @@ int main() {
     struct sockaddr_in server_address, client_address;
     socklen_t client_length = sizeof(client_address);
 
-     
     // Create a socket, AF_INET is IPv4 Internet Protocol
     // SOCK_STREAM (Provides sequenced, reliable, two-way, connection-based byte streams)
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) <= 0) {
@@ -295,6 +325,47 @@ int main() {
     }
     close(client_request);
 
+    return 0;
+}
+
+
+/*
+    Main function that parses wsconf file for the port, then sends it to open_port.
+    If open_port doesn't work, then it will exit with failure.
+*/
+int main() {
+    // Parse through wsconf file and set variables when needed.
+    int port;
+    char line[256];
+    FILE* conf_file = fopen("ws.conf","r");
+    while(fgets(line, sizeof(line), conf_file)){
+        if(line[0] != '#'){
+            char* parse = strtok(line, " ");
+            while (parse){
+                if (strcmp(parse, "Listen") == 0)
+                {
+                    parse = strtok(NULL, " ");
+                    port = atoi(parse);
+                }
+                else{
+                    parse = strtok(NULL, " ");
+                }
+            }
+        }
+    }
+    fclose(conf_file);
+    // End parse
+
+    int p = -1;
+    
+    p = open_port(port);
+
+    if ((p < 0)) {
+        perror("Port failed to open.");
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }
 
 
