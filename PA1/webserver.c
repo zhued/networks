@@ -8,7 +8,6 @@
 #include <arpa/inet.h>
 #include <err.h>
 #include <fcntl.h>
-#include <pthread.h>
 
 #include <ctype.h>
 #include <strings.h>
@@ -153,21 +152,6 @@ void handle_error(int client, const char *filename, int error_num)
     }
 }
 
-
-
-/**********************************************************************/
-/* Get a line from a socket, whether the line ends in a newline,
- * carriage return, or a CRLF combination.  Terminates the string read
- * with a null character.  If no newline indicator is found before the
- * end of the buffer, the string is terminated with a null.  If any of
- * the above three line terminators is read, the last character of the
- * string will be a linefeed and the string will be terminated with a
- * null character.
- * Parameters: the socket descriptor
- *             the buffer to save the data in
- *             the size of the buffer
- * Returns: the number of bytes stored (excluding null) */
-/**********************************************************************/
 int get_line(int sock, char *buf, int size_buffer)
 {
     int i = 0;
@@ -276,7 +260,6 @@ void listentoRequests(int client){
 */
 int open_port(int port) {
     int one = 1, client_request, sock;
-    pthread_t newthread;
 
     // Contain internet addresses for server and client 
     // using the sockaddr_in
@@ -318,12 +301,14 @@ int open_port(int port) {
             perror("Can't accept");
         }
  
-        // Create pthread that listens for more requests
-        if (pthread_create(&newthread , NULL, listentoRequests, client_request) != 0){
-            perror("pthread_create");
+        if(fork() == 0){
+        /* Perform the client’s request in the child process. */
+            listentoRequests(client_request);
+            exit(0);
         }
+        close(client_request);
     }
-    close(client_request);
+    close(sock);
 
     return 0;
 }
