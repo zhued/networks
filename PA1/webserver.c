@@ -25,6 +25,7 @@ int BUFFER_SIZE = 1024;
 void listentoRequests(int);
 void send_file(int, const char *);
 int get_line(int, char *, int);
+void read_store(int, FILE *);
 void handle_filetype(int client, const char *filename);
 void handle_error(int, const char *filename, int error_num);
 
@@ -44,24 +45,38 @@ void send_file(int client, const char *filename){
     if (requested_file == NULL){
         handle_error(client, filename, 404);
     }
-    else {
+
+    if(strstr(filename, ".html") != NULL){
+        FILE *resource = NULL;
+        int numchars = 1;
+        char buf[1024];
+
+        buf[0] = 'A'; buf[1] = '\0';
+        while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
+            numchars = get_line(client, buf, sizeof(buf));
+
+        resource = fopen(filename, "r");
+        handle_filetype(client, filename);
+        read_store(client, resource);
+        fclose(resource);
+    } else {
         // Find the size of requested file by streaming it through
         // then rewinds back to position in order to read again
         fseek(requested_file, 0, SEEK_END);
         fileLength = ftell(requested_file);
         rewind(requested_file);
     
-    // Set the send buffer to the exact size of the filelength by malloc
-    // Then read the file in with t
-    send_buffer = (char*) malloc(sizeof(char)*fileLength);
-    size_t result = fread(send_buffer, 1, fileLength, requested_file);
+        // Set the send buffer to the exact size of the filelength by malloc
+        // Then read the file in with t
+        send_buffer = (char*) malloc(sizeof(char)*fileLength);
+        size_t result = fread(send_buffer, 1, fileLength, requested_file);
     
-    // If result is readable, then handle the filetype and send the result to client
-    if (result > 0) {
-        handle_filetype(client, filename);
-        send(client, send_buffer, result, 0);   
-    }   
-    else { printf("Send error."); exit(1); }
+        // If result is readable, then handle the filetype and send the result to client
+        if (result > 0) {
+            handle_filetype(client, filename);
+            send(client, send_buffer, result, 0);   
+        }   
+        else { printf("Send error."); exit(1); }
     }
   
     fclose(requested_file);
@@ -149,6 +164,19 @@ void handle_error(int client, const char *filename, int error_num)
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "</BODY></HTML>\r\n");
         send(client, buf, strlen(buf), 0);
+    }
+}
+
+/*
+    Reads the resource file and sends it to the client
+*/
+void read_store(int client, FILE *resource){
+    char buf[1024];
+
+    fgets(buf, sizeof(buf), resource);
+    while (!feof(resource)){
+        send(client, buf, strlen(buf), 0);
+        fgets(buf, sizeof(buf), resource);
     }
 }
 
