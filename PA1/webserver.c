@@ -25,12 +25,11 @@ int BUFFER_SIZE = 1024;
 void listentoRequests(int);
 void send_file(int, const char *);
 int get_line(int, char *, int);
-void read_store(int, FILE *);
 void handle_filetype(int client, const char *filename);
 void handle_error(int, const char *filename, int error_num);
 
 /*
-    Sends file requested. Specifically the picture formats. 
+    Sends file requested. 
 */
 void send_file(int client, const char *filename){
     char *send_buffer;
@@ -46,10 +45,14 @@ void send_file(int client, const char *filename){
         handle_error(client, filename, 404);
     }
 
+    // HTML has weird behavior on Linux
+    // Must do the same as other binary files, but must also read and store 
+    // everything from the resource.
     if(strstr(filename, ".html") != NULL){
         FILE *resource = NULL;
         int numchars = 1;
-        char buf[1024];
+        char buf[BUFFER_SIZE];
+        char buf1[BUFFER_SIZE];
 
         buf[0] = 'A'; buf[1] = '\0';
         while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
@@ -57,7 +60,14 @@ void send_file(int client, const char *filename){
 
         resource = fopen(filename, "r");
         handle_filetype(client, filename);
-        read_store(client, resource);
+
+        // Reads the resource file and sends it to the client.
+        // Can't just send entire binary file.
+        fgets(buf1, sizeof(buf1), resource);
+        while (!feof(resource)){
+            send(client, buf1, strlen(buf1), 0);
+            fgets(buf1, sizeof(buf1), resource);
+        }
         fclose(resource);
     } else {
         // Find the size of requested file by streaming it through
@@ -85,8 +95,7 @@ void send_file(int client, const char *filename){
 /*
     Handle filetype that the client requests
 */
-void handle_filetype(int client, const char *filename)
-{
+void handle_filetype(int client, const char *filename){
     char buf[BUFFER_SIZE];
     (void)filename;
     const char* filetype;
@@ -110,16 +119,13 @@ void handle_filetype(int client, const char *filename)
     }
 
     if(strcmp(filetype, "html") == 0){
-        strcpy(buf, "HTTP/1.1 200 OK\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "Content-Type: text/html\r\n");
-        send(client, buf, strlen(buf), 0);
-        strcpy(buf, "\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
+        send(client, "Content-Type: text/html\r\n", strlen("Content-Type: text/html\r\n"), 0);
+        send(client, "\r\n", strlen("\r\n"), 0);
     }
 
     else if (strcmp(filetype, "png") == 0){
-        printf("PNG request received.");
+        printf("PNG request received.\n");
         strcpy(buf, "HTTP/1.1 200 OK\r\n");
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "Content-Type: image/png\r\n");
@@ -133,7 +139,7 @@ void handle_filetype(int client, const char *filename)
     }
 
     else if (strcmp(filetype, "gif") == 0) {
-        printf("GIF request received.");
+        printf("GIF request received.\n");
         strcpy(buf, "HTTP/1.1 200 OK\r\n");
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "Content-Type: image/gif\r\n");
@@ -147,9 +153,11 @@ void handle_filetype(int client, const char *filename)
     }
 }
 
-void handle_error(int client, const char *filename, int error_num)
-{
-    char buf[1024];
+/*
+    Handles errors
+*/
+void handle_error(int client, const char *filename, int error_num){
+    char buf[BUFFER_SIZE];
     if (error_num == 404)
     {
         sprintf(buf, "HTTP/1.1 404 NOT FOUND\r\n");
@@ -164,19 +172,6 @@ void handle_error(int client, const char *filename, int error_num)
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "</BODY></HTML>\r\n");
         send(client, buf, strlen(buf), 0);
-    }
-}
-
-/*
-    Reads the resource file and sends it to the client
-*/
-void read_store(int client, FILE *resource){
-    char buf[1024];
-
-    fgets(buf, sizeof(buf), resource);
-    while (!feof(resource)){
-        send(client, buf, strlen(buf), 0);
-        fgets(buf, sizeof(buf), resource);
     }
 }
 
@@ -221,7 +216,6 @@ void listentoRequests(int client){
     char *query_string = NULL;
 
     numchars = get_line(client, buf, sizeof(buf));
-    // printf("%d\n", numchars);
     
     i = 0; j = 0;
     while (!ISspace(buf[j]) && (i < sizeof(method) - 1)){
@@ -262,8 +256,6 @@ void listentoRequests(int client){
     //     error400(client, "Invalid Method");
     // }
     // // if (strstr(url, ""))
-
-
 
     // Addes the url to the path
     sprintf(path, "www%s", url);
