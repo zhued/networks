@@ -25,8 +25,10 @@ int BUFFER_SIZE = 1024;
 void listentoRequests(int);
 void send_file(int, const char *);
 int get_line(int, char *, int);
-void handle_filetype(int client, const char *filename);
-void handle_error(int, const char *filename, int error_num);
+char * deblank(char *);
+void handle_filetype(int , const char *);
+void handle_error(int, const char *, int );
+void send_error(int , char *);
 
 /*
     Sends file requested. 
@@ -86,7 +88,7 @@ void send_file(int client, const char *filename){
             handle_filetype(client, filename);
             send(client, send_buffer, result, 0);   
         }   
-        else { printf("Send error."); exit(1); }
+        else { handle_error(client, NULL, 500); }
     }
   
     fclose(requested_file);
@@ -126,8 +128,7 @@ void handle_filetype(int client, const char *filename){
 
     else if (strcmp(filetype, "png") == 0){
         printf("PNG request received.\n");
-        strcpy(buf, "HTTP/1.1 200 OK\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
         sprintf(buf, "Content-Type: image/png\r\n");
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "Content-Length: %lld \r\n", size);
@@ -160,20 +161,57 @@ void handle_error(int client, const char *filename, int error_num){
     char buf[BUFFER_SIZE];
     if (error_num == 404)
     {
-        sprintf(buf, "HTTP/1.1 404 NOT FOUND\r\n");
+        send(client, "HTTP/1.1 404 NOT FOUND\r\n", strlen("HTTP/1.1 404 NOT FOUND\r\n"), 0);
+        send(client, "Content-Type: text/html\r\n", strlen("Content-Type: text/html\r\n"), 0);
+        send(client, "\r\n", strlen("\r\n"), 0);
+        send(client, "<HTML><TITLE>404 NOT FOUND</TITLE>\r\n", strlen("<HTML><TITLE>404 NOT FOUND</TITLE>\r\n"), 0);
+        sprintf(buf, "<BODY><P>HTTP/1.1 404 Not Found: %s \r\n", filename);
+        send(client, buf, strlen(buf), 0);
+        send(client, "</BODY></HTML>\r\n", strlen("</BODY></HTML>\r\n"), 0);
+    }
+    else if (error_num == 400){
+        sprintf(buf, "HTTP/1.1 400 BAD REQUEST\r\n");
+        send(client, buf, sizeof(buf), 0);
+        sprintf(buf, "Content-type: text/html\r\n");
+        send(client, buf, sizeof(buf), 0);
+        sprintf(buf, "\r\n");
+        send(client, buf, sizeof(buf), 0);
+        if(strcmp(filename, "Invalid Method")){
+            sprintf(buf, "<P>HTTP/1.1 400 Bad Request:  Invalid Method");
+            send(client, buf, sizeof(buf), 0);
+        }
+        sprintf(buf, "\r\n");
+        send(client, buf, sizeof(buf), 0);
+
+    }
+    else if (error_num == 500) {
+        sprintf(buf, "HTTP/1.0 500 Internal Server Error\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "Content-type: text/html\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "HTTP/1.1 500  Internal  Server  Error:  cannot  allocate  memory\r\n");
+        send(client, buf, strlen(buf), 0);
+    }
+    else if (error_num == 501) {
+        sprintf(buf, "HTTP/1.1 501 Method Not Implemented\r\n");
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "Content-Type: text/html\r\n");
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "\r\n");
         send(client, buf, strlen(buf), 0);
-        sprintf(buf, "<HTML><TITLE>404 NOT FOUND</TITLE>\r\n");
+        sprintf(buf, "<HTML><HEAD><TITLE>Method Not Implemented\r\n");
         send(client, buf, strlen(buf), 0);
-        sprintf(buf, "<BODY><P>HTTP/1.1 404 Not Found: %s \r\n", filename);
+        sprintf(buf, "</TITLE></HEAD>\r\n");
+        send(client, buf, strlen(buf), 0);
+        sprintf(buf, "<BODY><P>HTTP/1.1 501  Not Implemented:  %s\r\n", filename);
         send(client, buf, strlen(buf), 0);
         sprintf(buf, "</BODY></HTML>\r\n");
         send(client, buf, strlen(buf), 0);
     }
 }
+
 
 int get_line(int sock, char *buf, int size_buffer)
 {
@@ -204,6 +242,19 @@ int get_line(int sock, char *buf, int size_buffer)
     return(i);
 }
 
+char * deblank(char *str)
+{
+    char *out = str, *put = str;
+
+    for(; *str != '\0'; ++str){
+        if(*str != ' ')
+            *put++ = *str;
+    }
+    *put = '\0';
+
+    return out;
+}
+
 void listentoRequests(int client){
     char buf[BUFFER_SIZE];
     int numchars;
@@ -212,8 +263,41 @@ void listentoRequests(int client){
     char path[512];
     size_t i, j;
     struct stat st;
+    char *extension;
+    char contentType[100];
+    char directoryIndex[100]; 
+    char document_root[100];
+    char line[256];
 
     char *query_string = NULL;
+
+    FILE* file = fopen("ws.conf", "r");
+    while (fgets(line, sizeof(line), file)) {
+        /* note that fgets don't strip the terminating \n, checking its
+           presence would allow to handle lines longer that sizeof(line) */
+        if(line[0] != '#'){
+            char* parse = strtok(line, " " );
+            while (parse){
+                if(strcmp(parse, "DirectoryIndex") == 0){
+                    parse = strtok(NULL, "");
+                    // strcpy(test, parse);
+                    strcat(directoryIndex, strtok(deblank(parse),"\n"));
+                }
+                else if(strcmp(parse, "DocumentRoot") == 0){
+                    parse = strtok(NULL, " ");
+                    strcat(document_root, strtok(deblank(parse), "\n"));
+                }
+                else if(parse[0] == '.'){
+                    strcat(contentType, parse);
+                    parse = strtok(NULL, ",");
+                }
+                else{
+                    parse = strtok(NULL, " "); 
+                }
+            }
+        }
+    } 
+    fclose(file);
 
     numchars = get_line(client, buf, sizeof(buf));
     
@@ -240,6 +324,14 @@ void listentoRequests(int client){
     }
     url[i] = '\0';
 
+    extension = strrchr(url, '.');
+    if (extension != NULL) {
+        if(strstr(contentType, extension) == NULL){
+            handle_error(client, url, 501);
+            return;
+        }
+    }
+
     if (strcasecmp(method, "GET") == 0){
         query_string = url;
         while ((*query_string != '?') && (*query_string != '\0'))
@@ -250,12 +342,10 @@ void listentoRequests(int client){
         }
     }
 
-    // // 400 error handling
-    // if (strcasecmp(method, "POST") == 0)
-    // {
-    //     error400(client, "Invalid Method");
-    // }
-    // // if (strstr(url, ""))
+    if (strcasecmp(method, "POST") == 0)
+    {
+        handle_error(client, "Invalid Method", 400);
+    }
 
     // Addes the url to the path
     sprintf(path, "www%s", url);
@@ -375,4 +465,4 @@ int main() {
 
 
 
-// (echo -en "GET /index.html HTTP/1.1\n Host: localhost \nConnection: keep-alive\n\nGET/index.html HTTP/1.1\nHost: localhost\n\n"; sleep&10) | telnet localhost 80
+// (echo -en "GET /index.html HTTP/1.1\n Host: localhost \nConnection: keep-alive\n\nGET/index.html HTTP/1.1\nHost: localhost\n\n"; sleep 10) | telnet localhost 80
