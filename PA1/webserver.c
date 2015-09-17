@@ -21,6 +21,13 @@
 
 int BUFFER_SIZE = 1024;
 
+struct Config {
+    int    port;
+    char    DocumentRoot[256];
+    char    DirectoryIndex[256];
+    char    content_type[100];
+    int     content_num;
+} config;
 
 void listentoRequests(int);
 void send_file(int, const char *);
@@ -28,7 +35,7 @@ int get_line(int, char *, int);
 char * deblank(char *);
 void handle_filetype(int , const char *);
 void handle_error(int, const char *, int );
-void send_error(int , char *);
+int open_port(int);
 
 /*
     Sends file requested. 
@@ -120,42 +127,34 @@ void handle_filetype(int client, const char *filename){
         filetype = dot + 1;
     }
 
+    // Send success codes on html and filetypes .png and .gif
     if(strcmp(filetype, "html") == 0){
         send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
         send(client, "Content-Type: text/html\r\n", strlen("Content-Type: text/html\r\n"), 0);
         send(client, "\r\n", strlen("\r\n"), 0);
     }
-
     else if (strcmp(filetype, "png") == 0){
         printf("PNG request received.\n");
         send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
-        sprintf(buf, "Content-Type: image/png\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "Content-Type: image/png\r\n", strlen("Content-Type: image/png\r\n"), 0);
         sprintf(buf, "Content-Length: %lld \r\n", size);
         send(client, buf, strlen(buf), 0);
-        sprintf(buf, "Content-Transfer-Encoding: binary\r\n");
-        send(client, buf, strlen(buf), 0);
-        strcpy(buf, "\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "Content-Transfer-Encoding: binary\r\n", strlen("Content-Transfer-Encoding: binary\r\n"), 0);
+        send(client, "\r\n", strlen("\r\n"), 0);
     }
-
     else if (strcmp(filetype, "gif") == 0) {
         printf("GIF request received.\n");
-        strcpy(buf, "HTTP/1.1 200 OK\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "Content-Type: image/gif\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
+        send(client, "Content-Type: image/gif\r\n", strlen("Content-Type: image/gif\r\n"), 0);
         sprintf(buf, "Content-Length: %lld \r\n", size);
         send(client, buf, strlen(buf), 0);
-        sprintf(buf, "Content-Transfer-Encoding: binary\r\n");
-        send(client, buf, strlen(buf), 0);
-        strcpy(buf, "\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "Content-Transfer-Encoding: binary\r\n", strlen("Content-Transfer-Encoding: binary\r\n"), 0);
+        send(client, "\r\n", strlen("\r\n"), 0);
     }
 }
 
 /*
-    Handles errors
+    Handles errors, 400,404, 500, and 501 implemented
 */
 void handle_error(int client, const char *filename, int error_num){
     char buf[BUFFER_SIZE];
@@ -170,45 +169,30 @@ void handle_error(int client, const char *filename, int error_num){
         send(client, "</BODY></HTML>\r\n", strlen("</BODY></HTML>\r\n"), 0);
     }
     else if (error_num == 400){
-        sprintf(buf, "HTTP/1.1 400 BAD REQUEST\r\n");
-        send(client, buf, sizeof(buf), 0);
-        sprintf(buf, "Content-type: text/html\r\n");
-        send(client, buf, sizeof(buf), 0);
-        sprintf(buf, "\r\n");
-        send(client, buf, sizeof(buf), 0);
+        send(client, "HTTP/1.1 400 BAD REQUEST\r\n", sizeof("HTTP/1.1 400 BAD REQUEST\r\n"), 0);
+        send(client, "Content-type: text/html\r\n", sizeof("Content-type: text/html\r\n"), 0);
+        send(client, "\r\n", sizeof("\r\n"), 0);
         if(strcmp(filename, "Invalid Method")){
-            sprintf(buf, "<P>HTTP/1.1 400 Bad Request:  Invalid Method");
-            send(client, buf, sizeof(buf), 0);
+            send(client, "<P>HTTP/1.1 400 Bad Request:  Invalid Method", sizeof("<P>HTTP/1.1 400 Bad Request:  Invalid Method"), 0);
         }
-        sprintf(buf, "\r\n");
-        send(client, buf, sizeof(buf), 0);
+        send(client, "\r\n", sizeof("\r\n"), 0);
 
     }
     else if (error_num == 500) {
-        sprintf(buf, "HTTP/1.0 500 Internal Server Error\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "Content-type: text/html\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "HTTP/1.1 500  Internal  Server  Error:  cannot  allocate  memory\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "HTTP/1.0 500 Internal Server Error\r\n", strlen("HTTP/1.0 500 Internal Server Error\r\n"), 0);
+        send(client, "Content-type: text/html\r\n", strlen("Content-type: text/html\r\n"), 0);
+        send(client, "\r\n", strlen("\r\n"), 0);
+        send(client, "HTTP/1.1 500  Internal  Server  Error:  cannot  allocate  memory\r\n", strlen("HTTP/1.1 500  Internal  Server  Error:  cannot  allocate  memory\r\n"), 0);
     }
     else if (error_num == 501) {
-        sprintf(buf, "HTTP/1.1 501 Method Not Implemented\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "Content-Type: text/html\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "<HTML><HEAD><TITLE>Method Not Implemented\r\n");
-        send(client, buf, strlen(buf), 0);
-        sprintf(buf, "</TITLE></HEAD>\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "HTTP/1.1 501 Method Not Implemented\r\n", strlen("HTTP/1.1 501 Method Not Implemented\r\n"), 0);
+        send(client, "Content-Type: text/html\r\n", strlen("Content-Type: text/html\r\n"), 0);
+        send(client, "\r\n", strlen("\r\n"), 0);
+        send(client, "<HTML><HEAD><TITLE>Method Not Implemented\r\n", strlen("<HTML><HEAD><TITLE>Method Not Implemented\r\n"), 0);
+        send(client, "</TITLE></HEAD>\r\n", strlen("</TITLE></HEAD>\r\n"), 0);
         sprintf(buf, "<BODY><P>HTTP/1.1 501  Not Implemented:  %s\r\n", filename);
         send(client, buf, strlen(buf), 0);
-        sprintf(buf, "</BODY></HTML>\r\n");
-        send(client, buf, strlen(buf), 0);
+        send(client, "</BODY></HTML>\r\n", strlen("</BODY></HTML>\r\n"), 0);
     }
 }
 
@@ -242,19 +226,6 @@ int get_line(int sock, char *buf, int size_buffer)
     return(i);
 }
 
-char * deblank(char *str)
-{
-    char *out = str, *put = str;
-
-    for(; *str != '\0'; ++str){
-        if(*str != ' ')
-            *put++ = *str;
-    }
-    *put = '\0';
-
-    return out;
-}
-
 void listentoRequests(int client){
     char buf[BUFFER_SIZE];
     int numchars;
@@ -264,40 +235,8 @@ void listentoRequests(int client){
     size_t i, j;
     struct stat st;
     char *extension;
-    char contentType[100];
-    char directoryIndex[100]; 
-    char document_root[100];
-    char line[256];
 
     char *query_string = NULL;
-
-    FILE* file = fopen("ws.conf", "r");
-    while (fgets(line, sizeof(line), file)) {
-        /* note that fgets don't strip the terminating \n, checking its
-           presence would allow to handle lines longer that sizeof(line) */
-        if(line[0] != '#'){
-            char* parse = strtok(line, " " );
-            while (parse){
-                if(strcmp(parse, "DirectoryIndex") == 0){
-                    parse = strtok(NULL, "");
-                    // strcpy(test, parse);
-                    strcat(directoryIndex, strtok(deblank(parse),"\n"));
-                }
-                else if(strcmp(parse, "DocumentRoot") == 0){
-                    parse = strtok(NULL, " ");
-                    strcat(document_root, strtok(deblank(parse), "\n"));
-                }
-                else if(parse[0] == '.'){
-                    strcat(contentType, parse);
-                    parse = strtok(NULL, ",");
-                }
-                else{
-                    parse = strtok(NULL, " "); 
-                }
-            }
-        }
-    } 
-    fclose(file);
 
     numchars = get_line(client, buf, sizeof(buf));
     
@@ -326,7 +265,7 @@ void listentoRequests(int client){
 
     extension = strrchr(url, '.');
     if (extension != NULL) {
-        if(strstr(contentType, extension) == NULL){
+        if(strstr(config.content_type, extension) == NULL){
             handle_error(client, url, 501);
             return;
         }
@@ -348,7 +287,7 @@ void listentoRequests(int client){
     }
 
     // Addes the url to the path
-    sprintf(path, "www%s", url);
+    sprintf(path, "%s%s", config.DocumentRoot, url);
     if (path[strlen(path) - 1] == '/')
         strcat(path, "index.html");
     if (stat(path, &st) == -1) {
@@ -430,30 +369,58 @@ int open_port(int port) {
 */
 int main() {
     // Parse through wsconf file and set variables when needed.
-    int port;
-    char line[256];
+    // int port;
+    // char line[256];
+    // 
+    char *line;
+    char head[64], tail[256];
+    size_t len = 0;
+    int read_len = 0;
+    int content_num = 0;
+    // 
     FILE* conf_file = fopen("ws.conf","r");
-    while(fgets(line, sizeof(line), conf_file)){
-        if(line[0] != '#'){
-            char* parse = strtok(line, " ");
-            while (parse){
-                if (strcmp(parse, "Listen") == 0)
-                {
-                    parse = strtok(NULL, " ");
-                    port = atoi(parse);
-                }
-                else{
-                    parse = strtok(NULL, " ");
-                }
+    while((read_len = getline(&line, &len, conf_file)) != -1) {
+        // Remove endline character
+        line[read_len-1] = '\0';
+        // Ignore comments
+        if (line[0] == '#')
+            continue;
+        sscanf(line, "%s %s", head, tail);
+        // Parse the port number - Must convert to int first
+        if (!strcmp(head, "Listen")) {
+            config.port = atoi(tail);
+        } 
+        // Parse the DocumentRoot
+        if (!strncmp(head, "DocumentRoot", 12)) {
+            sscanf(line, "%*s \"%s", config.DocumentRoot);
+            // random quotation mark at end
+            config.DocumentRoot[strlen(config.DocumentRoot)-1] = '\0';
+        } 
+        // Parse the DirectoryIndex
+        if (!strcmp(head, "DirectoryIndex")) {
+            sscanf(line, "%*s %s", config.DirectoryIndex);
+            config.DocumentRoot[strlen(config.DirectoryIndex)-1] = '\0';
+        }
+        // Parse each content type that conf file has, then count how many
+        // content types there are.
+        if (head[0] == '.') {
+            if (content_num < 10) {
+                strcat(config.content_type, head);
+                strcat(config.content_type, " ");
+                
             }
         }
     }
+    config.content_num = content_num;
+    
     fclose(conf_file);
     // End parse
 
     int p = -1;
     
-    p = open_port(port);
+    // Open the port
+    // p = open_port(port);
+    p = open_port(config.port);
 
     if ((p < 0)) {
         perror("Port failed to open.");
