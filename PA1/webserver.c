@@ -14,10 +14,6 @@
 #include <string.h>
 #include <sys/stat.h>
 // #include <sys/wait.h>
- 
-// Get's rid of the buffer so the file is actually servable.
-// Checks whitespace
-#define ISspace(x) isspace((int)(x))
 
 int BUFFER_SIZE = 1024;
 
@@ -26,7 +22,7 @@ void listentoRequests(int);
 void send_file(int, const char *);
 int get_line(int, char *, int);
 char * deblank(char *);
-void handle_request();
+// void handle_request(int);
 void handle_filetype(int , const char *);
 void handle_error(int, const char *, int );
 int open_port(int);
@@ -40,9 +36,9 @@ struct Config {
 } config;
 
 struct Request {
-    char    command[8];
-    char    request[256];
-    char    version[16];
+    char    method[256];
+    char    url[256];
+    char    httpver[256];
     char    host[128];
     int     keep_alive;
 } request; 
@@ -207,63 +203,52 @@ void handle_error(int client, const char *filename, int error_num){
 }
 
 
-
 int get_line(int sock, char *buf, int size_buffer)
 {
-    int i = 0;
+    int p = 0;
     char c = '\0';
     int n;
 
-    while ((i < size_buffer - 1) && (c != '\n'))
+    while ((p < size_buffer - 1) && (c != '\n'))
     {
         n = recv(sock, &c, 1, 0);
         // printf("%02X\n", c);
         if (n > 0){
             if (c == '\r'){
                 n = recv(sock, &c, 1, MSG_PEEK);
-                //printf("%02X\n", c);
+                // printf("%02X\n", c);
                 if ((n > 0) && (c == '\n'))
                     recv(sock, &c, 1, 0);
                 else
                     c = '\n';
             }
-            buf[i] = c;
-            i++;
+            buf[p] = c;
+            p++;
         }
         else
             c = '\n';
     }
-    buf[i] = '\0';
-    return(i);
+    buf[p] = '\0';
+
+    return(p);
 }
 
+/*
+    Constantly listens to requests from client and handles it
+*/
 void listentoRequests(int client){
     char buf[BUFFER_SIZE];
     int numchars;
-    char method[255];
-    // char request_head[255];
-    char url[255];
-    char httpver[255];
     char path[512];
-    size_t i, j;
     struct stat st;
     char *extension;
 
-    char *query_string = NULL;
-
     numchars = get_line(client, buf, sizeof(buf));
-    
-    i = 0; j = 0;
-    while (!ISspace(buf[j]) && (i < sizeof(method) - 1)){
-        method[i] = buf[j];
-        i++; j++;
-    }
-    method[i] = '\0';
-    
-    // request_head[i] = '\0';
-    // sscanf(request_head, "%s %s %s", method, url, httpver);
-    // method[strlen(method)+1] = '\0';
-    // url[strlen(method)+1] = '\0';
+
+    sscanf(buf, "%s %s %s", request.method, request.url, request.httpver);
+    request.method[strlen(request.method)+1] = '\0';
+    request.url[strlen(request.url)+1] = '\0';
+    request.httpver[strlen(request.httpver)+1] = '\0';
 
 
     // if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
@@ -272,65 +257,42 @@ void listentoRequests(int client){
     //  return;
     // }
 
-    i = 0;
-    while (ISspace(buf[j]) && (j < sizeof(buf)))
-        j++;
-    while (!ISspace(buf[j]) && (i < sizeof(url) - 1) && (j < sizeof(buf))){
-        url[i] = buf[j];
-        i++; j++;
-    }
-    url[i] = '\0';
-
-    i = 0;
-    while (ISspace(buf[j]) && (j < sizeof(buf)))
-        j++;
-    while (!ISspace(buf[j]) && (i < sizeof(httpver) - 1) && (j < sizeof(buf))){
-        httpver[i] = buf[j];
-        i++; j++;
-    }
-    httpver[i] = '\0';
-
-    printf("%s\n", method);
-    printf("%s\n", url);
-    printf("%s\n", httpver);
-
-
-
-    extension = strrchr(url, '.');
+    extension = strrchr(request.url, '.');
     if (extension != NULL) {
         if(strstr(config.content_type, extension) == NULL){
-            handle_error(client, url, 501);
+            handle_error(client, request.url, 501);
             return;
         }
     }
 
-    if (strcasecmp(method, "GET") == 0){
-        query_string = url;
-        while ((*query_string != '?') && (*query_string != '\0'))
-            query_string++;
-        if (*query_string == '?'){
-           *query_string = '\0';
-           query_string++;
-        }
-    }
 
-    if (strcasecmp(method, "POST") == 0)
+
+    if (strcasecmp(request.method, "POST") == 0)
     {
         handle_error(client, "Invalid Method", 400);
     }
 
+
     // Addes the url to the path
-    sprintf(path, "%s%s", config.DocumentRoot, url);
+    sprintf(path, "%s%s", config.DocumentRoot, request.url);
     if (path[strlen(path) - 1] == '/')
-        strcat(path, "index.html");
+        strcat(path, config.DirectoryIndex);
+
+    char head[64], tail[256];
     if (stat(path, &st) == -1) {
-        while ((numchars > 0) && strcmp("\n", buf))   //read & discard header 
+        while ((numchars > 0) && strcmp("\n", buf)){   //read & discard header 
             numchars = get_line(client, buf, sizeof(buf));
-        handle_error(client, path, 404);
-    } else {
-        if ((st.st_mode & S_IFMT) == S_IFDIR){
-            strcat(path, "/index.html");
+            sscanf(buf, "%s %s", head, tail);
+            if (!strcmp("Connection:", head)){
+                printf("%s\n", tail);
+            }
         }
+        handle_error(client, path, 404);
+    } 
+    else {
+        // if ((st.st_mode & S_IFMT) == S_IFDIR){
+        //     strcat(path, strcat("/", config.DirectoryIndex));
+        // }
         send_file(client, path);
     }
     close(client);
