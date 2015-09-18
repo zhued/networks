@@ -21,6 +21,16 @@
 
 int BUFFER_SIZE = 1024;
 
+
+void listentoRequests(int);
+void send_file(int, const char *);
+int get_line(int, char *, int);
+char * deblank(char *);
+void handle_request();
+void handle_filetype(int , const char *);
+void handle_error(int, const char *, int );
+int open_port(int);
+
 struct Config {
     int    port;
     char    DocumentRoot[256];
@@ -29,13 +39,13 @@ struct Config {
     int     content_num;
 } config;
 
-void listentoRequests(int);
-void send_file(int, const char *);
-int get_line(int, char *, int);
-char * deblank(char *);
-void handle_filetype(int , const char *);
-void handle_error(int, const char *, int );
-int open_port(int);
+struct Request {
+    char    command[8];
+    char    request[256];
+    char    version[16];
+    char    host[128];
+    int     keep_alive;
+} request; 
 
 /*
     Sends file requested. 
@@ -196,6 +206,136 @@ void handle_error(int client, const char *filename, int error_num){
     }
 }
 
+// void handle_request(int fd){
+//     char   *req_400_1 =    "HTTP/1.1 400 Bad Request: Invalid Method: ";
+//     char    *req_400_2 =    "HTTP/1.1 400 Bad Request: Invalid URI: ";
+//     char    *req_400_3 =    "HTTP/1.1 400 Bad Request: Invalid HTTP-Version: ";
+//     char    *req_500 =  "HTTP/1.1 500 Internal Server Error: ";
+
+//     struct  Request request;
+//     char    buf[BUFFER_SIZE];
+//     char    current[BUFFER_SIZE];
+//     char    resp[2048];
+
+//     int read_len = 0;
+//     int     len = 0;
+
+//     /* Holds the state of a request 
+//      * 0 means no request received
+//      * 1 means request initiated, waiting on paramaters */
+//     int     req_state = 0; 
+//     /* Maintains whether a request has been parsed for a single token
+//      * 0 means no completed request
+//      * 1 means a complete request has been parsed and will be sent */
+//     int     req_complete = 0;
+//     /* Maintains whether a request has been sent. Used for building segmented requests.
+//      * 0 means no request has been sent
+//      * 1 means a request was sent during the last batch */
+//     int     req_sent = 0;
+    
+//     fd_set set;
+//     FD_ZERO(&set);
+//     FD_SET(fd, &set);
+
+//     struct timeval timeout;
+//     timeout.tv_sec = 10;
+//     int rv;
+
+//     while ((rv = select(fd + 1, &set, NULL, NULL, &timeout)) > 0) {
+//         // Read input from user
+//         read_len = recv(fd, &buf[len], (BUFSIZ-len), 0);
+//         char    current[read_len];
+
+//         // Copy last received line
+//         strncpy(current, &buf[len], sizeof(current));
+
+//         len += read_len;
+
+//         // Zero end of array
+//         buf[len] = '\0';
+//         current[read_len-1] = '\0';
+
+//         // Split current buffer line endings
+//         char *current_ptr = &current[0];
+//         char *token = strsep(&current_ptr, "\n");
+//         printf("%s\n", token);
+//         for(token; token != '\0'; token = strsep(&current_ptr, "\n")) {
+//             // Remove trailing '\r'
+//             if (token[strlen(token)-1] == '\r')
+//                 token[strlen(token) - 1] = '\0';
+
+//             //printf("'%s'\n", token);
+//             // Empty line is the end of a request if one has been started
+//             if (strlen(token) == 0) {
+//                 if (req_state == 1)
+//                     req_complete = 1;
+//                 else {
+//                     // Exit loop when no longer receiving input
+//                     break;
+//                 }
+//             } else {
+//                 if(req_state == 0) {    // Not currently receiving headers
+//                     // Valid HTTP header received
+//                     if (!strncmp(token, "GET", 3)) {
+//                         sscanf(token, "%s %s %s %*s", 
+//                             req.command, req.request, req.version);
+//                         req_state = 1;
+//                         // Unsuported version
+//                         if (strncmp(req.version, "HTTP/1.0", 8) &&
+//                             strncmp(req.version, "HTTP/1.1", 8)) {
+//                             int rlen = sprintf(resp, "%s", req_400_3);
+//                             rlen += sprintf(resp + rlen, "%s\r\n", req.version); 
+//                         }
+
+//                     } else { // Invalid request
+//                         len = 0;
+//                         strcpy(resp, req_400_1);
+//                         strcat(resp, token);
+//                         if (send(fd, resp, strlen(resp), 0) < 0)
+//                             errexit("echo write: %s\n", strerror(errno));
+//                     }
+//                 }  else if (req_state == 1) {   // Receiving request headers
+//                     // Read in host
+//                     if (!strncmp(token, "Host:", 5)) 
+//                         sscanf(token, "%*s %s %*s", req.host);
+//                     // Read in keep-alive
+//                     if (!strcmp(token, "Connection: keep-alive"))
+//                         req.keep_alive = 1;
+
+//                 }
+//             }
+
+//             /* HTTP request was captured
+//             */
+//             if (req_complete == 1) {
+//                 if (process_request(fd, req) < 0) {
+//                     sprintf(resp, "%s", req_500);
+//                     // Send respnse
+//                     if (write(fd, resp, strlen(resp)) < 0)
+//                             errexit("echo write: %s\n", strerror(errno));
+//                 }
+
+//                 // Restart request
+//                 req = EmptyRequest;
+//                 req_state = 0;
+//                 req_complete = 0;
+//                 req_sent = 1;
+//                 len = 0;
+//             }
+//         }
+//         Kill connection
+//         if (req.keep_alive == 0 && req_sent == 1)
+//             return 0;
+//         req_complete = 0;
+//         req_sent = 0;
+
+//     }
+//     // if (rv < 0)
+//     //     errexit("echo in select: %s\n", strerror(errno));
+//     // // Timeout
+//     // return 0;
+// }
+
 
 int get_line(int sock, char *buf, int size_buffer)
 {
@@ -230,7 +370,9 @@ void listentoRequests(int client){
     char buf[BUFFER_SIZE];
     int numchars;
     char method[255];
+    // char request_head[255];
     char url[255];
+    char httpver[255];
     char path[512];
     size_t i, j;
     struct stat st;
@@ -245,8 +387,13 @@ void listentoRequests(int client){
         method[i] = buf[j];
         i++; j++;
     }
-    
     method[i] = '\0';
+    
+    // request_head[i] = '\0';
+    // sscanf(request_head, "%s %s %s", method, url, httpver);
+    // method[strlen(method)+1] = '\0';
+    // url[strlen(method)+1] = '\0';
+
 
     // if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
     // {
@@ -262,6 +409,21 @@ void listentoRequests(int client){
         i++; j++;
     }
     url[i] = '\0';
+
+    i = 0;
+    while (ISspace(buf[j]) && (j < sizeof(buf)))
+        j++;
+    while (!ISspace(buf[j]) && (i < sizeof(httpver) - 1) && (j < sizeof(buf))){
+        httpver[i] = buf[j];
+        i++; j++;
+    }
+    httpver[i] = '\0';
+
+    printf("%s\n", method);
+    printf("%s\n", url);
+    printf("%s\n", httpver);
+
+
 
     extension = strrchr(url, '.');
     if (extension != NULL) {
