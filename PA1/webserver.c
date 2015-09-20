@@ -39,7 +39,7 @@ struct Request {
     char    method[256];
     char    url[256];
     char    httpver[256];
-    char    host[128];
+    // char    host[128];
     int     keep_alive;
 } request; 
 
@@ -114,7 +114,7 @@ void handle_filetype(int client, const char *filename){
     char buf[BUFFER_SIZE];
     (void)filename;
     const char* filetype;
-    off_t size;
+    long int size;
 
     // Find size of the file to set as content length
     FILE *f = fopen(filename, "r");
@@ -143,7 +143,7 @@ void handle_filetype(int client, const char *filename){
         printf("PNG request received.\n");
         send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
         send(client, "Content-Type: image/png\r\n", strlen("Content-Type: image/png\r\n"), 0);
-        sprintf(buf, "Content-Length: %lld \r\n", size);
+        sprintf(buf, "Content-Length: %ld \r\n", size);
         send(client, buf, strlen(buf), 0);
         send(client, "Content-Transfer-Encoding: binary\r\n", strlen("Content-Transfer-Encoding: binary\r\n"), 0);
         send(client, "\r\n", strlen("\r\n"), 0);
@@ -152,7 +152,7 @@ void handle_filetype(int client, const char *filename){
         printf("GIF request received.\n");
         send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
         send(client, "Content-Type: image/gif\r\n", strlen("Content-Type: image/gif\r\n"), 0);
-        sprintf(buf, "Content-Length: %lld \r\n", size);
+        sprintf(buf, "Content-Length: %ld \r\n", size);
         send(client, buf, strlen(buf), 0);
         send(client, "Content-Transfer-Encoding: binary\r\n", strlen("Content-Transfer-Encoding: binary\r\n"), 0);
         send(client, "\r\n", strlen("\r\n"), 0);
@@ -164,6 +164,7 @@ void handle_filetype(int client, const char *filename){
 */
 void handle_error(int client, const char *filename, int error_num){
     char buf[BUFFER_SIZE];
+    // File not found is 404
     if (error_num == 404)
     {
         send(client, "HTTP/1.1 404 NOT FOUND\r\n", strlen("HTTP/1.1 404 NOT FOUND\r\n"), 0);
@@ -174,22 +175,34 @@ void handle_error(int client, const char *filename, int error_num){
         send(client, buf, strlen(buf), 0);
         send(client, "</BODY></HTML>\r\n", strlen("</BODY></HTML>\r\n"), 0);
     }
+    // Formating error, either invalid method, http version, or uri
     else if (error_num == 400){
         send(client, "HTTP/1.1 400 BAD REQUEST\r\n", sizeof("HTTP/1.1 400 BAD REQUEST\r\n"), 0);
         send(client, "Content-type: text/html\r\n", sizeof("Content-type: text/html\r\n"), 0);
         send(client, "\r\n", sizeof("\r\n"), 0);
         if(strcmp(filename, "Invalid Method")){
-            send(client, "<P>HTTP/1.1 400 Bad Request:  Invalid Method", sizeof("<P>HTTP/1.1 400 Bad Request:  Invalid Method"), 0);
+            sprintf(buf, "<P>HTTP/1.1 400 Bad Request:  Invalid Method: %s \r\n", request.method);
+            send(client, buf, strlen(buf), 0);
+            // send(client, "<P>HTTP/1.1 400 Bad Request:  Invalid Method", sizeof("<P>HTTP/1.1 400 Bad Request:  Invalid Method"), 0);
+        }
+        if(strcmp(filename, "Invalid Version")){
+            sprintf(buf, "<P>HTTP/1.1 400 Bad Request:  Invalid Version: %s \r\n", request.httpver);
+            send(client, buf, strlen(buf), 0);
+            // send(client, "<P>HTTP/1.1 400 Bad Request:  Invalid Version", sizeof("<P>HTTP/1.1 400 Bad Request:  Invalid Version"), 0);
+        }
+        if(strcmp(filename, "Invalid URI")){
+            send(client, "<P>HTTP/1.1 400 Bad Request:  Invalid URI", sizeof("<P>HTTP/1.1 400 Bad Request:  Invalid URI"), 0);
         }
         send(client, "\r\n", sizeof("\r\n"), 0);
-
     }
+    // unexpected server errors
     else if (error_num == 500) {
         send(client, "HTTP/1.0 500 Internal Server Error\r\n", strlen("HTTP/1.0 500 Internal Server Error\r\n"), 0);
         send(client, "Content-type: text/html\r\n", strlen("Content-type: text/html\r\n"), 0);
         send(client, "\r\n", strlen("\r\n"), 0);
         send(client, "HTTP/1.1 500  Internal  Server  Error:  cannot  allocate  memory\r\n", strlen("HTTP/1.1 500  Internal  Server  Error:  cannot  allocate  memory\r\n"), 0);
     }
+    // Not implemented file format/type
     else if (error_num == 501) {
         send(client, "HTTP/1.1 501 Method Not Implemented\r\n", strlen("HTTP/1.1 501 Method Not Implemented\r\n"), 0);
         send(client, "Content-Type: text/html\r\n", strlen("Content-Type: text/html\r\n"), 0);
@@ -202,7 +215,9 @@ void handle_error(int client, const char *filename, int error_num){
     }
 }
 
-
+/*
+    Returns back a line of the header
+*/
 int get_line(int sock, char *buf, int size_buffer)
 {
     int p = 0;
@@ -242,21 +257,34 @@ void listentoRequests(int client){
     char path[512];
     struct stat st;
     char *extension;
+    char all_headers[1024];
 
+    // gets the first line of the header
     numchars = get_line(client, buf, sizeof(buf));
 
+    // Scan the line in buf for three things:
+    //      Method, url, and HTTP version
+    // and sets it as request class variables
     sscanf(buf, "%s %s %s", request.method, request.url, request.httpver);
     request.method[strlen(request.method)+1] = '\0';
     request.url[strlen(request.url)+1] = '\0';
     request.httpver[strlen(request.httpver)+1] = '\0';
 
+    // Concatenate all remaining headers into a string
+    while ((numchars > 0) && strcmp("\n", buf)){
+        numchars = get_line(client, buf, sizeof(numchars));
+        strcat(all_headers, buf);
+    }
 
-    // if (strcasecmp(method, "GET") && strcasecmp(method, "POST"))
-    // {
-    //  unimplemented(client);
-    //  return;
-    // }
+    // If there is a keep-alive in header, then set keep_alive to 1, else 0
+    if (!strstr("Connection: keep-alive", all_headers)){
+        request.keep_alive = 1;
+    } else{
+        request.keep_alive = 0;
+    }
 
+    // Get extension types from the url, and if the content type
+    // isn't in the conf file
     extension = strrchr(request.url, '.');
     if (extension != NULL) {
         if(strstr(config.content_type, extension) == NULL){
@@ -265,36 +293,33 @@ void listentoRequests(int client){
         }
     }
 
-
-
-    if (strcasecmp(request.method, "POST") == 0)
-    {
+    // If it is something other than GET, then it's a 400 invalid method.
+    if (strcasecmp(request.method, "GET") != 0){
         handle_error(client, "Invalid Method", 400);
     }
-
+    // If the HTTP version is something other than 1.1 or 1.0, then throw error invalid version.
+    if ((strcmp(request.httpver, "HTTP/1.1") != 0) && (strcmp(request.httpver, "HTTP/1.0") != 0) ){
+        handle_error(client, "Invalid Version", 400);
+    }
+    // Check URI, if not valid, then throw invalid URI error.
+    if (strstr( request.url, " " ) || strstr( request.url, "\\" )){
+        handle_error(client, "Invalid URI", 400);
+    }
 
     // Addes the url to the path
     sprintf(path, "%s%s", config.DocumentRoot, request.url);
     if (path[strlen(path) - 1] == '/')
         strcat(path, config.DirectoryIndex);
 
-    char head[64], tail[256];
+    // Check if DirectoryIndex is reachable, if not, send 404
+    // If reachable, send whatever file is requested
     if (stat(path, &st) == -1) {
-        while ((numchars > 0) && strcmp("\n", buf)){   //read & discard header 
-            numchars = get_line(client, buf, sizeof(buf));
-            sscanf(buf, "%s %s", head, tail);
-            if (!strcmp("Connection:", head)){
-                printf("%s\n", tail);
-            }
-        }
         handle_error(client, path, 404);
-    } 
-    else {
-        // if ((st.st_mode & S_IFMT) == S_IFDIR){
-        //     strcat(path, strcat("/", config.DirectoryIndex));
-        // }
+    } else {
         send_file(client, path);
     }
+    
+    // close the client
     close(client);
 }
 
@@ -346,7 +371,7 @@ int open_port(int port) {
         }
  
         if(fork() == 0){
-        /* Perform the client’s request in the child process. */
+            // Perform the client’s request in the child process
             listentoRequests(client_request);
             exit(0);
         }
