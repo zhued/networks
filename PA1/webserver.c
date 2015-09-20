@@ -148,6 +148,13 @@ void handle_filetype(int client, const char *filename){
         send(client, "Content-Transfer-Encoding: binary\r\n", strlen("Content-Transfer-Encoding: binary\r\n"), 0);
         send(client, "\r\n", strlen("\r\n"), 0);
     }
+    else if (strcmp(filetype, "txt") == 0){
+        send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
+        send(client, "Content-Type: text/plain\r\n", strlen("Content-Type: text/plain\r\n"), 0);
+        sprintf(buf, "Content-Length: %zd \r\n", size);
+        send(client, buf, strlen(buf), 0);
+        send(client, "\r\n", strlen("\r\n"), 0);
+    }
     else if (strcmp(filetype, "gif") == 0) {
         printf("GIF request received.\n");
         send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
