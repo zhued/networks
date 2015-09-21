@@ -324,13 +324,34 @@ void listentoRequests(int client){
     if (path[strlen(path) - 1] == '/')
         strcat(path, config.DirectoryIndex);
 
-    // Check if DirectoryIndex is reachable, if not, send 404
-    // If reachable, send whatever file is requested
+
+
+
+
     if (stat(path, &st) == -1) {
+        while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
+        {
+            numchars = get_line(client, buf, sizeof(buf));
+            printf("%s\n", buf);
+        }
         handle_error(client, path, 404);
-    } else {
-        send_file(client, path);
-    }    
+    }
+    else{
+        if ((st.st_mode & S_IFMT) == S_IFDIR){
+            strcat(path, strcat("/", config.DirectoryIndex));
+        }
+            send_file(client, path);
+    }
+
+
+
+    // // Check if DirectoryIndex is reachable, if not, send 404
+    // // If reachable, send whatever file is requested
+    // if (stat(path, &st) == -1) {
+    //     handle_error(client, path, 404);
+    // } else {
+    //     send_file(client, path);
+    // }    
 
     // close the client
     close(client);
