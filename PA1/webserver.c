@@ -1,3 +1,10 @@
+/*
+    Edward Zhu
+    Programming Assignment 1
+    HTTP Web Server - in C
+    9/20/15
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -223,7 +230,7 @@ void handle_error(int client, const char *filename, int error_num){
 }
 
 /*
-    Returns back a line of the header
+    Returns the amount of bytes read and sets buffer to a line of the header
 */
 int get_line(int sock, char *buf, int size_buffer)
 {
@@ -306,6 +313,10 @@ void listentoRequests(int client){
         }
     }
 
+    // Check URI, if not valid, then throw invalid URI error.
+    if (strstr( request.url, " " ) || strstr( request.url, "\\" )){
+        handle_error(client, "Invalid URI", 400);
+    }
     // If it is something other than GET, then it's a 400 invalid method.
     if (strcasecmp(request.method, "GET") != 0){
         handle_error(client, "Invalid Method", 400);
@@ -314,44 +325,19 @@ void listentoRequests(int client){
     if ((strcmp(request.httpver, "HTTP/1.1") != 0) && (strcmp(request.httpver, "HTTP/1.0") != 0) ){
         handle_error(client, "Invalid Version", 400);
     }
-    // Check URI, if not valid, then throw invalid URI error.
-    if (strstr( request.url, " " ) || strstr( request.url, "\\" )){
-        handle_error(client, "Invalid URI", 400);
-    }
 
     // Addes the url to the path
     sprintf(path, "%s%s", config.DocumentRoot, request.url);
     if (path[strlen(path) - 1] == '/')
         strcat(path, config.DirectoryIndex);
 
-
-
-
-
+    // Check if DirectoryIndex is reachable, if not, send 404
+    // If reachable, send whatever file is requested
     if (stat(path, &st) == -1) {
-        while ((numchars > 0) && strcmp("\n", buf))  /* read & discard headers */
-        {
-            numchars = get_line(client, buf, sizeof(buf));
-            printf("%s\n", buf);
-        }
         handle_error(client, path, 404);
-    }
-    else{
-        if ((st.st_mode & S_IFMT) == S_IFDIR){
-            strcat(path, strcat("/", config.DirectoryIndex));
-        }
-            send_file(client, path);
-    }
-
-
-
-    // // Check if DirectoryIndex is reachable, if not, send 404
-    // // If reachable, send whatever file is requested
-    // if (stat(path, &st) == -1) {
-    //     handle_error(client, path, 404);
-    // } else {
-    //     send_file(client, path);
-    // }    
+    } else {
+        send_file(client, path);
+    }    
 
     // close the client
     close(client);
