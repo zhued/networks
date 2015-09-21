@@ -27,12 +27,13 @@ int BUFFER_SIZE = 1024;
 void listentoRequests(int);
 void send_file(int, const char *);
 int get_line(int, char *, int);
-char * deblank(char *);
-// void handle_request(int);
 void handle_filetype(int , const char *);
 void handle_error(int, const char *, int );
 int open_port(int);
 
+/*
+    Information from the ws.conf file, parsed in main()
+*/
 struct Config {
     int    port;
     char    DocumentRoot[256];
@@ -41,6 +42,9 @@ struct Config {
     int     content_num;
 } config;
 
+/*
+    Information from each request, parsed in listentoRequests()
+*/
 struct Request {
     char    method[256];
     char    url[256];
@@ -466,7 +470,3 @@ int main() {
 
     return EXIT_SUCCESS;
 }
-
-
-
-// (echo -en "GET /index.html HTTP/1.1\n Host: localhost \nConnection: keep-alive\n\nGET/index.html HTTP/1.1\nHost: localhost\n\n"; sleep 10) | telnet localhost 80
