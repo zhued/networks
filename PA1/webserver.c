@@ -13,7 +13,6 @@
 #include <strings.h>
 #include <string.h>
 #include <sys/stat.h>
-// #include <sys/wait.h>
 
 int BUFFER_SIZE = 1024;
 
@@ -39,7 +38,6 @@ struct Request {
     char    method[256];
     char    url[256];
     char    httpver[256];
-    // char    host[128];
     int     keep_alive;
 } request; 
 
@@ -103,7 +101,7 @@ void send_file(int client, const char *filename){
         }   
         else { handle_error(client, NULL, 500); }
     }
-  
+
     fclose(requested_file);
 }
 
@@ -135,6 +133,7 @@ void handle_filetype(int client, const char *filename){
 
     // Send success codes on html and filetypes .png and .gif
     if(strcmp(filetype, "html") == 0){
+        printf("HTML request received.\n");
         send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
         send(client, "Content-Type: text/html\r\n", strlen("Content-Type: text/html\r\n"), 0);
         send(client, "\r\n", strlen("\r\n"), 0);
@@ -149,6 +148,7 @@ void handle_filetype(int client, const char *filename){
         send(client, "\r\n", strlen("\r\n"), 0);
     }
     else if (strcmp(filetype, "txt") == 0){
+        printf("TXT request received.\n");
         send(client, "HTTP/1.1 200 OK\r\n", strlen("HTTP/1.1 200 OK\r\n"), 0);
         send(client, "Content-Type: text/plain\r\n", strlen("Content-Type: text/plain\r\n"), 0);
         sprintf(buf, "Content-Length: %zd \r\n", size);
@@ -231,22 +231,28 @@ int get_line(int sock, char *buf, int size_buffer)
     char c = '\0';
     int n;
 
+    // loop through until pointer is size of buffer or c is a new line 
     while ((p < size_buffer - 1) && (c != '\n'))
     {
+        // receive messages from socket
         n = recv(sock, &c, 1, 0);
-        // printf("%02X\n", c);
+        // n - number of bytes received, 0 would mean end of file
         if (n > 0){
+            // if c is return value, Peek at whole receive queue
+            // if n is still positive, then keep going
+            // if not, then end on the new line
             if (c == '\r'){
                 n = recv(sock, &c, 1, MSG_PEEK);
-                // printf("%02X\n", c);
                 if ((n > 0) && (c == '\n'))
                     recv(sock, &c, 1, 0);
                 else
                     c = '\n';
             }
+            // copy c character into buffer and increment
             buf[p] = c;
             p++;
         }
+        // if 0, then end of file, so give new line
         else
             c = '\n';
     }
@@ -324,8 +330,8 @@ void listentoRequests(int client){
         handle_error(client, path, 404);
     } else {
         send_file(client, path);
-    }
-    
+    }    
+
     // close the client
     close(client);
 }
@@ -345,13 +351,13 @@ int open_port(int port) {
     // Create a socket, AF_INET is IPv4 Internet Protocol
     // SOCK_STREAM (Provides sequenced, reliable, two-way, connection-based byte streams)
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) <= 0) {
-        perror("can't open socket");
+        perror("Can't open socket");
         return -1;
     }
  
     // Makes the socket usuable by different clients
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) < 0) {
-        perror("setsockopt - SO_REUSEADDR failed");
+        perror("Setsockopt - SO_REUSEADDR failed");
         return -1;
     }
  
@@ -376,7 +382,8 @@ int open_port(int port) {
         if (client_request == -1) {
             perror("Can't accept");
         }
- 
+        
+        // FORK IT BABY
         if(fork() == 0){
             // Perform the client’s request in the child process
             listentoRequests(client_request);
@@ -396,9 +403,6 @@ int open_port(int port) {
 */
 int main() {
     // Parse through wsconf file and set variables when needed.
-    // int port;
-    // char line[256];
-    // 
     char *line;
     char head[64], tail[256];
     size_t len = 0;
@@ -446,7 +450,6 @@ int main() {
     int p = -1;
     
     // Open the port
-    // p = open_port(port);
     p = open_port(config.port);
 
     if ((p < 0)) {
