@@ -31,8 +31,8 @@ struct Config {
     char    dfs2_port[20];
     char    dfs3_port[20];
     char    dfs4_port[20];
-    char    Username[50];
-    char    Password[50];
+    char    Username[128];
+    char    Password[128];
 } config_dfc;
 
 void parse_config(const char *);
@@ -49,6 +49,7 @@ void parse_config(const char *filename) {
     while((read_len = getline(&line, &len, conf_file)) != -1) {
         // Remove endline character
         line[read_len-1] = '\0';
+        
         sscanf(line, "%s %s %s", head, second, host_port);
 
         // If the head is Server, then parse each server created
@@ -87,9 +88,9 @@ void parse_config(const char *filename) {
     fclose(conf_file);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
     char *conf_file, buf[MAXSIZE];
-    int n;
+    // int n;
 
     // If no parameter given, send error
     // If it is given, then set conf_file to argv[1]
@@ -102,6 +103,7 @@ int main(int argc, char **argv) {
     // Parse through wsconf file and set variables when needed.
     parse_config(conf_file);
     // End parse
+
 
 
 
