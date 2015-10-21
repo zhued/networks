@@ -1,6 +1,8 @@
-FILES=dfc dfs
+EXE=dfc dfs
 
-CLEAN=rm -f $(FILES) *.o *.a
+all: $(EXE)
+
+CLEAN=rm -f $(EXE) *.o *.a
 
 dfs: dfs.c
 	gcc -Wall -g -o dfs dfs.c
