@@ -24,7 +24,7 @@
 // #include <sys/stat.h>
 
 int BUFFER_SIZE = 1024;
-#define MAXSIZE  8192
+int MAXSIZE = 8192;
 
 struct Config {
     char    dfs1_port[20];
@@ -36,6 +36,7 @@ struct Config {
 } config_dfc;
 
 void parse_config(const char *);
+void process_request(char *);
 
 
 
@@ -49,7 +50,7 @@ void parse_config(const char *filename) {
     while((read_len = getline(&line, &len, conf_file)) != -1) {
         // Remove endline character
         line[read_len-1] = '\0';
-        
+
         sscanf(line, "%s %s %s", head, second, host_port);
 
         // If the head is Server, then parse each server created
@@ -77,20 +78,32 @@ void parse_config(const char *filename) {
     }
 
     // Debugging
-    printf("dfsport1: %s\n", config_dfc.dfs1_port);
-    printf("dfsport2: %s\n", config_dfc.dfs2_port);
-    printf("dfsport3: %s\n", config_dfc.dfs3_port);
-    printf("dfsport4: %s\n", config_dfc.dfs4_port);
-    printf("Username: %s\n", config_dfc.Username);
-    printf("Password: %s\n", config_dfc.Password);
+    // printf("dfsport1: %s\n", config_dfc.dfs1_port);
+    // printf("dfsport2: %s\n", config_dfc.dfs2_port);
+    // printf("dfsport3: %s\n", config_dfc.dfs3_port);
+    // printf("dfsport4: %s\n", config_dfc.dfs4_port);
+    // printf("Username: %s\n", config_dfc.Username);
+    // printf("Password: %s\n", config_dfc.Password);
 
 
     fclose(conf_file);
 }
 
+void process_request(char * buf){
+    if (strncmp(buf, "GET", 3) == 0) {
+        printf("GET CALLED!\n");
+    } else if(strncmp(buf, "LIST", 4) == 0) {
+        printf("LIST CALLED!\n");
+    } else if(strncmp(buf, "PUT", 3) == 0) {
+        printf("PUT CALLED!\n");
+    } else {
+        printf("Unsupported Command: %s\n", buf);
+    }
+
+}
+
 int main(int argc, char *argv[]) {
     char *conf_file, buf[MAXSIZE];
-    // int n;
 
     // If no parameter given, send error
     // If it is given, then set conf_file to argv[1]
@@ -102,8 +115,19 @@ int main(int argc, char *argv[]) {
 
     // Parse through wsconf file and set variables when needed.
     parse_config(conf_file);
-    // End parse
 
+    // Open up stdin to take in commands
+    printf("Enter 'q' to quit.");
+    while(1){
+        printf("\nEnter a command: ");
+        if(fgets(buf, MAXSIZE, stdin) != NULL) {
+            if (!strncmp(buf, "q", 1)){
+                printf("Quitting out.");
+                break;
+            }
+            process_request(buf);
+        }
+    }
 
 
 
