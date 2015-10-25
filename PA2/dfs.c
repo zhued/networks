@@ -17,8 +17,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-// #include <netdb.h>
-// #include <arpa/inet.h>
+#include <netdb.h>
+#include <arpa/inet.h>
 // #include <err.h>
 // #include <fcntl.h>
 
@@ -86,10 +86,10 @@ int put(char *name) {
     return 0;
 }
 
-void process_request_server(int socket){
-    printf("heloooooooo\n");
+// void process_request_server(int socket){
+//     printf("heloooooooo\n");
 
-}
+// }
 
 
 int open_port(int port){
@@ -97,7 +97,7 @@ int open_port(int port){
     struct sockaddr_in server , client;
      
     //Create socket
-    socket_desc = socket(AF_INET , SOCK_STREAM , 0);
+    socket_desc = socket(AF_INET , SOCK_STREAM , IPPROTO_TCP);
     if (socket_desc == -1)
     {
         printf("Could not create socket\n");
@@ -107,7 +107,7 @@ int open_port(int port){
     //Prepare the sockaddr_in structure
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( port );
+    server.sin_port = htons(port);
      
     //Bind
     if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
@@ -119,7 +119,7 @@ int open_port(int port){
     printf("bind done\n");
      
     //Listen
-    listen(socket_desc , 5);
+    listen(socket_desc , 3);
      
     //Accept and incoming connection
     printf("Waiting for incoming connections...\n");
@@ -132,7 +132,7 @@ int open_port(int port){
          
         if(fork() == 0){
             printf("Connected! %d\n", port);         
-            process_request_server(client_sock);    
+            // process_request_server(client_sock);    
             exit(0);        
         }
          
