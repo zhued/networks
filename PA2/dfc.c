@@ -10,11 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-// #include <sys/types.h> 
-// #include <sys/socket.h>
+#include <sys/types.h> 
+#include <sys/socket.h>
 // #include <netinet/in.h>
 // #include <netdb.h>
-// #include <arpa/inet.h>
+#include <arpa/inet.h>
 // #include <err.h>
 // #include <fcntl.h>
 
@@ -36,7 +36,7 @@ struct Config {
 } config_dfc;
 
 void parse_config(const char *);
-void process_request(char *);
+void process_request_client(char *);
 
 
 
@@ -89,7 +89,7 @@ void parse_config(const char *filename) {
     fclose(conf_file);
 }
 
-void process_request(char * buf){
+void process_request_client(char * buf){
     if (strncmp(buf, "GET", 3) == 0) {
         printf("GET CALLED!\n");
     } else if(strncmp(buf, "LIST", 4) == 0) {
@@ -125,7 +125,7 @@ int main(int argc, char *argv[]) {
                 printf("Quitting out.");
                 break;
             }
-            process_request(buf);
+            process_request_client(buf);
         }
     }
 
