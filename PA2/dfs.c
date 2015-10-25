@@ -6,7 +6,6 @@
     dfc.c
     Distributive Filesystem Server
 
-    Code and inspiration based on: http://www.binarytides.com/server-client-example-c-sockets-linux/
 
 */
 
@@ -44,7 +43,9 @@ struct Config {
 void parse_config(const char *);
 int check_user(int , char * , char * );
 void list(int, char *);
-int get(char *name);
+requestFileCheck(char * );
+void checkFileCurrServ(int , char * );
+int get(char *);
 int put(char *name);
 
 int check_user(int socket, char * username, char * password) 
@@ -131,12 +132,11 @@ void list_server(int socket, char * username) {
                 sprintf(path, "%s/%s", directory, dir->d_name);
                 status = lstat(path, &filedets);
                 if(S_ISDIR(filedets.st_mode)) {
+                    // Skip directories
                 } else {
                     if(strncmp(dir->d_name, ".DS_Store", 9) != 0)
                     {
                         length += sprintf(result + length, "%d. %s\n", i, dir->d_name);
-
-                        // checkFileCurrServ(sock, dir->d_name);
                         //TODO: Check for Pieces on Other Servers
                         i++;
                         // continue;
@@ -147,13 +147,15 @@ void list_server(int socket, char * username) {
         printf("FILES FOUND: \n %s\n", result);
         write(socket, result, strlen(result));
         closedir(d);
-    } 
+    }
 }
 
-int get(char *name) {
 
-    return 0;
+int get(char *line)
+{
+    
 }
+
 
 int put(char *name) {
 
@@ -189,13 +191,12 @@ void process_request_server(int socket){
         }
         sscanf(line, "%s %s", command, arg);
 
-        if (strncmp(command, "GET", 3) == 0) {
+        if(strncmp(command, "LIST", 4) == 0) {
+            printf("LIST CALLED:\n");
+            list_server(socket, username);
+        } else if (strncmp(command, "GET", 3) == 0) {
             printf("GET CALLED!\n");
             // serverGet(socket, arg);
-        } else if(strncmp(command, "LIST", 4) == 0) {
-            printf("LIST CALLED:\n");
-            // send(socket, command , strlen(command), 0);
-            list_server(socket, username);
         } else if(strncmp(command, "PUT", 3) == 0){
             printf("PUT Called!\n");
             // serverPut(socket, arg);
@@ -316,3 +317,26 @@ int main(int argc, char *argv[]) {
 
     return EXIT_SUCCESS;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

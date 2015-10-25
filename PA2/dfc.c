@@ -197,7 +197,7 @@ int connect_to_server(int port, const char *host){
     {
         printf("Could not create socket");
     }
-    // puts("Socket created");
+
     printf("port num %d\n", port);
     server.sin_addr.s_addr = inet_addr(host);
     server.sin_family = AF_INET;
@@ -238,10 +238,15 @@ int main(int argc, char *argv[]) {
         // printf("fd is %d\n", fd);
     }
 
+    // DEBUGGING
     // for (i = 1; i < server_num+1; ++i){
     //     printf("fd is %d\n", config_dfc.dfs_fd[i]);
     // }
 
+    // for (i = 1; i < server_num+1; ++i){
+    //     printf("Listening on Socket %d\n", config_dfc.dfs_fd[i]);
+    //     process_request_client(config_dfc.dfs_fd[i]);
+    // }
     process_request_client(config_dfc.dfs_fd[1]);
 
 
