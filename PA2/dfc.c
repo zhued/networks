@@ -23,23 +23,6 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#include <sys/errno.h> // for errexit
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <ctype.h>
-#include <strings.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <pthread.h>
-#include <sys/wait.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <fcntl.h>
-
 int BUFFER_SIZE = 1024;
 int MAXSIZE = 8192;
 
@@ -56,10 +39,13 @@ void process_request_client(char *);
 int connect_to_server(int, const char *);
 
 
-
-int parse_config(const char *filename) {
-    char *line;
-    char head[BUFFER_SIZE], second[BUFFER_SIZE], host_port[BUFFER_SIZE];
+/*
+Parses the config file
+Taken from my first webserver assignment
+*/
+int parse_config(const char *filename){
+    char *line, *token;
+    char head[64], second[256], host[256];
     size_t len = 0;
     int read_len = 0;
     int num_servers = 0;
@@ -69,31 +55,15 @@ int parse_config(const char *filename) {
         // Remove endline character
         line[read_len-1] = '\0';
 
-        sscanf(line, "%s %s 127.0.0.1:%s", head, second, host_port);
+        sscanf(line, "%s %s %s", head, second, host);
 
         // If the head is Server, then parse each server created
         // and set it in the config_dfc object
         if (!strcmp(head, "Server")) {
-            if (!strcmp(second, "DFS1")){
-                strcat(config_dfc.dfs_host[1], second);
-                // strcat(config_dfc.dfs_port[1], host_port);
-                config_dfc.dfs_port[1] = atoi(host_port);
-            }
-            if (!strcmp(second, "DFS2")){
-                strcat(config_dfc.dfs_host[2], second);
-                // strcat(config_dfc.dfs_port[2], host_port);
-                config_dfc.dfs_port[2] = atoi(host_port);
-            }
-            if (!strcmp(second, "DFS3")){
-                strcat(config_dfc.dfs_host[3], second);
-                // strcat(config_dfc.dfs_port[3], host_port);
-                config_dfc.dfs_port[3] = atoi(host_port);
-            }
-            if (!strcmp(second, "DFS4")){
-                strcat(config_dfc.dfs_host[4], second);
-                // strcat(config_dfc.dfs_port[4], host_port);
-                config_dfc.dfs_port[4] = atoi(host_port);
-            }
+            token = strtok(host, ":");
+            strncpy(config_dfc.dfs_host[num_servers+1],token, 20);
+            token = strtok(NULL, " ");
+            config_dfc.dfs_port[num_servers+1]= atoi(token);
             num_servers++;
         } 
 
@@ -133,11 +103,8 @@ void process_request_client(char * buf){
 
 }
 
-// int send_request(char * request, const int server_num){
-
-// }
-
-int connect_to_server(int port, const char *host){
+// Connect to a certain socket
+int connect_to_server(int port, const char *hostname){
     int sock;
     struct sockaddr_in server;
      
@@ -149,7 +116,7 @@ int connect_to_server(int port, const char *host){
     }
     // puts("Socket created");
     printf("port num %d\n", port);
-    server.sin_addr.s_addr = inet_addr(host);
+    server.sin_addr.s_addr = inet_addr(hostname);
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
  
@@ -168,7 +135,6 @@ int connect_to_server(int port, const char *host){
 }
 
 int main(int argc, char *argv[]) {
-    char *conf_file, buf[MAXSIZE];
     int server_num, i;
 
     // If no parameter given, send error
@@ -177,39 +143,40 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Config file required.");
         exit(0);
     }
-    conf_file = argv[1];
 
     // Parse through wsconf file and set variables when needed.
-    server_num = parse_config(conf_file);
+    server_num = parse_config(argv[1]);
 
     // create connection to all servers
     printf("There are %d servers in the config file.\n", server_num);
     printf("Attempting to connect...\n\n");
-    config_dfc.dfs_fd[1]= connect_to_server(10001, config_dfc.dfs_host[1]);
-    printf("fd is %d\n", config_dfc.dfs_fd[1]);
-    // for (i = 1; i < server_num+1; ++i){
-    //     config_dfc.dfs_fd[i]= connect_to_server(config_dfc.dfs_port[i], config_dfc.dfs_host[i]);
-    //     // printf("fd is %d\n", fd);
-    // }
+
+    for (i = 1; i < server_num+1; ++i){
+        config_dfc.dfs_fd[i]= connect_to_server(config_dfc.dfs_port[i], config_dfc.dfs_host[i]);
+        // printf("fd is %d\n", fd);
+    }
 
     // for (i = 1; i < server_num+1; ++i){
     //     printf("fd is %d\n", config_dfc.dfs_fd[i]);
     // }
 
-    // Open up stdin to take in commands
-    printf("Enter 'q' to quit.");
-    while(1){
-        printf("\nEnter a command: ");
-        if(fgets(buf, MAXSIZE, stdin) != NULL) {
-            if (!strncmp(buf, "q", 1)){
-                printf("Quitting out.");
-                break;
-            }
-            process_request_client(buf);
-        }
-    }
-
-
+    // // Try to connect to one of the servers
+    // for (i = 0; i < num_servers; i++)
+    // {
+    //     if(config_dfc.dfs_fd[i] != 1)
+    //     {
+    //         printf("%d\n", config_dfc.dfs_fd[i]);
+    //         readUserInput(config_dfc.dfs_fd[i]);
+    //         // connection found, break out of loop.
+    //         break;
+    //     }
+    // }
 
     return EXIT_SUCCESS;
+
+
+
+
+    // return EXIT_SUCCESS;
+
 }
