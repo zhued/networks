@@ -17,6 +17,7 @@
 #include <arpa/inet.h>
 #include <err.h>
 #include <fcntl.h>
+#include <sys/errno.h>
 
 #include <ctype.h>
 #include <strings.h>
@@ -35,9 +36,47 @@ struct Config {
 } config_dfc;
 
 int parse_config(const char *);
-void process_request_client(char *);
+void process_request_client(int);
 int connect_to_server(int, const char *);
+// void authenticateUser(int, char *, char *);
+void list();
+int get(char *name);
+int put(char *name);
 
+// int errexit(const char *format, ...) {
+//         va_list args;
+//         va_start(args, format);
+//         vfprintf(stderr, format, args);
+//         va_end(args);
+//         exit(1);
+// }
+
+void auth_user(int sock, char * username, char * password){
+    char *result = malloc(strlen(username)+strlen(password));//+1 for the zero-terminator
+    strcpy(result, "AUTH:");
+    strcat(result, username);
+    strcat(result, " ");
+    strcat(result, password);
+    if (write(sock, result, strlen(result)) < 0){
+        printf("Authentication failed\n");
+        // errexit("Error in Authentication: %s\n", strerror(errno));
+    }
+    // printf("Authentication success!\n");
+}
+
+void list() {
+    
+}
+
+int get(char *name) {
+
+    return 0;
+}
+
+int put(char *name) {
+
+    return 0;
+}
 
 /*
 Parses the config file
@@ -90,21 +129,65 @@ int parse_config(const char *filename){
     return num_servers;
 }
 
-void process_request_client(char * buf){
-    if (strncmp(buf, "GET", 3) == 0) {
-        printf("GET CALLED!\n");
-    } else if(strncmp(buf, "LIST", 4) == 0) {
-        printf("LIST CALLED!\n");
-    } else if(strncmp(buf, "PUT", 3) == 0) {
-        printf("PUT CALLED!\n");
-    } else {
-        printf("Unsupported Command: %s\n", buf);
-    }
+/*
+Referenced this to make interactive commands:
+http://stephen-brennan.com/2015/01/16/write-a-shell-in-c/
+*/
+void process_request_client(int sock){
+    char *line = NULL, command[8], arg[64];
+    // char *token;
+    ssize_t len = 0;
+    ssize_t read;
+    int status = 1;
 
+    do {
+        printf("Enter Commands> ");
+        read = getline(&line, &len, stdin);
+        line[read-1] = '\0';
+
+        sscanf(line, "%s %s", command, arg);
+
+
+        if (!strncasecmp(command, "LIST", 4)) {
+            char reply[BUFFER_SIZE];
+            if(write(sock, command, strlen(command)) < 0) {
+                puts("List failed");
+                // errexit("Error in List: %s\n", strerror(errno));
+            }
+            if( recv(sock, reply, 2000, 0) < 0)
+            {
+                // errexit("Error in recv: %s\n", strerror(errno));
+                puts("recv failed");
+            } else {
+                printf("%s\n", reply);
+            }
+        } else if (!strncasecmp(command, "GET", 3)) {
+            if (strlen(line) <= 4)
+                printf("GET needs an argument\n");
+            else
+                printf("GET CALLED!\n");
+        } else if (!strncasecmp(command, "PUT", 3)) {
+            if (strlen(line) <= 4)
+                printf("PUT needs an argument\n");
+            else
+                printf("PUT CALLED!\n");
+        } else if (!strncasecmp(command, "q", 1)) {
+            status = 0;
+        } else {
+            printf("Unsupported Command: %s\n", command);
+        }
+        //printf("%s\n", command);
+    } while(status);
+
+    printf("Quitting out...\n");
 }
 
-// Connect to a certain socket
-int connect_to_server(int port, const char *hostname){
+/*
+ Connect to a certain socket
+ Reference from:
+ http://www.binarytides.com/server-client-example-c-sockets-linux/
+*/
+int connect_to_server(int port, const char *host){
     int sock;
     struct sockaddr_in server;
      
@@ -116,7 +199,7 @@ int connect_to_server(int port, const char *hostname){
     }
     // puts("Socket created");
     printf("port num %d\n", port);
-    server.sin_addr.s_addr = inet_addr(hostname);
+    server.sin_addr.s_addr = inet_addr(host);
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
  
@@ -127,7 +210,7 @@ int connect_to_server(int port, const char *hostname){
         return 1;
     }
 
-    // authenticateUser(sock, username, password);
+    auth_user(sock, config_dfc.Username, config_dfc.Password);
 
     printf("Socket %d connected on port %d\n", sock, ntohs(server.sin_port));
 
@@ -148,8 +231,7 @@ int main(int argc, char *argv[]) {
     server_num = parse_config(argv[1]);
 
     // create connection to all servers
-    printf("There are %d servers in the config file.\n", server_num);
-    printf("Attempting to connect...\n\n");
+    printf("%d servers in conf file\n\n", server_num);
 
     for (i = 1; i < server_num+1; ++i){
         config_dfc.dfs_fd[i]= connect_to_server(config_dfc.dfs_port[i], config_dfc.dfs_host[i]);
@@ -160,23 +242,9 @@ int main(int argc, char *argv[]) {
     //     printf("fd is %d\n", config_dfc.dfs_fd[i]);
     // }
 
-    // // Try to connect to one of the servers
-    // for (i = 0; i < num_servers; i++)
-    // {
-    //     if(config_dfc.dfs_fd[i] != 1)
-    //     {
-    //         printf("%d\n", config_dfc.dfs_fd[i]);
-    //         readUserInput(config_dfc.dfs_fd[i]);
-    //         // connection found, break out of loop.
-    //         break;
-    //     }
-    // }
+    process_request_client(config_dfc.dfs_fd[1]);
+
 
     return EXIT_SUCCESS;
-
-
-
-
-    // return EXIT_SUCCESS;
 
 }
