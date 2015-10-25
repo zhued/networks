@@ -24,10 +24,11 @@
 
 // #include <ctype.h>
 // #include <strings.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
 
-int BUFFER_SIZE = 1024;
+int BUFFER_SIZE = 2048;
 char server_dir[256] = ".";
 int user_num = 0;
 
@@ -43,9 +44,9 @@ struct Config {
 void parse_config(const char *);
 int check_user(int , char * , char * );
 void list(int, char *);
-requestFileCheck(char * );
-void checkFileCurrServ(int , char * );
-int get(char *);
+// requestFileCheck(char * );
+// void checkFileCurrServ(int , char * );
+void get(char *, int);
 int put(char *name);
 
 int check_user(int socket, char * username, char * password) 
@@ -116,7 +117,7 @@ void list_server(int socket, char * username) {
     char result[256];
 
     char path[BUFFER_SIZE];
-    char directory[4096];
+    char directory[BUFFER_SIZE];
 
     strcpy(directory, server_dir);
     strcat(directory, username);
@@ -150,10 +151,50 @@ void list_server(int socket, char * username) {
     }
 }
 
+/*
+Push a file to client because GET requested
+Reference:
+http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
+*/
+void get( char * send_file, int sock) {
+    char file_loc[128];
+    int fd;
+    char buf[BUFFER_SIZE];
 
-int get(char *line)
-{
-    
+    sprintf(file_loc, "%s%s/%s", server_dir, server_conf.current_user_name, send_file);
+
+    if ((fd = open(file_loc, O_RDONLY)) < 0)
+        printf("failed to open file\n");
+        // errexit("Failed to open file at: '%s' %s\n", file_loc, strerror(errno)); 
+    while (1) {
+        // Read data into buffer.  We may not have enough to fill up buffer, so we
+        // store how many bytes were actually read in bytes_read.
+        int bytes_read = read(fd, buf, sizeof(buf));
+        if (bytes_read == 0) // We're done reading from the file
+            break;
+
+        if (bytes_read < 0) {
+            // handle errors
+            printf("Failed to read\n");
+            // errexit("Failed to read: %s\n", strerror(errno));
+        }
+
+        // You need a loop for the write, because not all of the data may be written
+        // in one call; write will return how many bytes were written. p keeps
+        // track of where in the buffer we are, while we decrement bytes_read
+        // to keep track of how many bytes are left to write.
+        void *p = buf;
+        printf("Writing back into sock\n");
+
+        while (bytes_read > 0) {
+            int bytes_written = write(sock, p, bytes_read);
+            if (bytes_written <= 0) {
+                // handle errors
+            }
+            bytes_read -= bytes_written;
+            p += bytes_written;
+        }
+    }
 }
 
 
@@ -197,6 +238,7 @@ void process_request_server(int socket){
         } else if (strncmp(command, "GET", 3) == 0) {
             printf("GET CALLED!\n");
             // serverGet(socket, arg);
+            get(arg, socket);
         } else if(strncmp(command, "PUT", 3) == 0){
             printf("PUT Called!\n");
             // serverPut(socket, arg);
@@ -340,3 +382,165 @@ int main(int argc, char *argv[]) {
 
 
 
+
+// int requestFileCheck(char * filename){
+
+//     //Connect to Each Servers
+//     // char host[9] = "localhost";
+//     static int currport = 10001;
+//     char res[2];
+//     int servfd = 0;
+
+//     char command[MAXLINE];
+
+//     sprintf(command, "CHECK %s %s %s\n", currUser.name, currUser.passwd, filename);
+
+//     // printf("Command RFC: %s\n", command);
+
+//     for(currport = 10001; currport<10005; currport++){
+
+//         // printf("Port: %d\n", currport);    
+
+//         if (currport == serverPort){
+
+//         } else {
+//             //Connect to Other Server
+//             // printf("Trying to connect to server: %d\n", currport);
+
+//             servfd = open_clientfd("localhost", currport);
+
+//             //TODO 1 sec timeout
+
+//             write(servfd, command, strlen(command));
+//             readline(servfd, res, 2);
+
+//             // printf("We read: %s %d\n", res, strncmp(res, "1", 1));
+
+//             if(strncmp(res, "1", 1) == 0){
+//                 // printf("WE FOUND IT!\n");
+//                 return 1;
+//             }
+//             close(servfd);
+//         }
+//     }
+
+//     return 0;
+// }
+
+
+// void checkFileCurrServ(int connfd, char * filename){
+//     char ext[8] = "";
+//     char filenopart[256] = "";
+//     char currpart[256] = "";
+//     char path[256] = "";
+
+//     int fd;
+
+//     strcpy(filenopart, strtok (filename, "."));
+
+//     strcpy(ext, strtok (NULL, "."));
+
+//     if (strtok (NULL, ".") != NULL){
+//         sprintf(filenopart, "%s.%s", filenopart, ext);
+//     } 
+
+//     //TODO Check to See if we Already Saw that File
+
+//     printf("Filename: %s\n",filenopart);
+
+//     int part1 = 0;
+//     int part2 = 0;
+//     int part3 = 0;
+//     int part4 = 0;
+
+//     //Check Current Server for Part
+//     sprintf(path, "%s%s/", serverDir, currUser.name);
+
+//     strcpy(currpart, filenopart);
+//     strcat(currpart, ".1");
+
+//     strcat(path, currpart);
+
+//     // printf("Path: %s FD: %d\n", path, access( path, F_OK ));
+
+//     if ((fd = open(path, O_RDONLY)) != -1){
+//         part1 = 1;  
+//         // printf("CWe found part1\n");
+
+//     } else {
+//         if (requestFileCheck(currpart)){
+//             // printf("SWe found part1\n");
+//             part1 = 1;
+//         }
+//     }
+//     close(fd);
+
+//     sprintf(path, "%s%s/", serverDir, currUser.name);
+
+//     strcpy(currpart, filenopart);
+//     strcat(currpart, ".2");
+
+//     strcat(path, currpart);
+
+//     if ((fd = open(path, O_RDONLY)) != -1){
+//         part2 = 1;  
+//         // printf("CWe found part3\n");
+//     } else {
+//         if (requestFileCheck(currpart)){
+//             part2 = 1;
+//             // printf("SWe found part3\n");
+//         }
+//     }
+//     close(fd);
+
+
+//     sprintf(path, "%s%s/", serverDir, currUser.name);
+
+//     strcpy(currpart, filenopart);
+//     strcat(currpart, ".3");
+
+//     strcat(path, currpart);
+
+//     if ((fd = open(path, O_RDONLY) != -1)){
+//         part3 = 1;  
+//         // printf("CWe found part3\n");
+
+//     } else {
+//         if (requestFileCheck(currpart)){
+//             part3 = 1;
+//             // printf("SWe found part3\n");
+
+//         }
+//     }
+//     close(fd);
+
+//     sprintf(path, "%s%s/", serverDir, currUser.name);
+
+//     strcpy(currpart, filenopart);
+//     strcat(currpart, ".4");
+
+//     strcat(path, currpart);
+
+//     if ((fd = open(path, O_RDONLY) != -1)){
+//         part4 = 1;  
+//         // printf("CWe found part4\n");
+
+//     } else {
+//         if (requestFileCheck(currpart)){
+//             part4 = 1;
+//             // printf("SWe found part4\n");
+//         }
+//     }
+//     close(fd);
+
+//     if ((part1+part2+part3+part4) == 4){
+//         printf("File Found!: %s\n", filenopart );
+//         write(connfd, filenopart, strlen(filenopart));
+//         write(connfd, "\n", 1);
+//     } else {
+//         write(connfd, filenopart, strlen(filenopart));
+//         write(connfd, " [incomplete]", 13);
+//         write(connfd, "\n", 1);
+//     }
+
+// }

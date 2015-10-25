@@ -23,6 +23,7 @@
 #include <strings.h>
 #include <string.h>
 #include <sys/stat.h>
+// #include <openssl/md5.h>
 
 int BUFFER_SIZE = 1024;
 int MAXSIZE = 8192;
@@ -68,8 +69,39 @@ void list() {
     
 }
 
-int get(char *name) {
+int get(char *line) {
+    char buf[BUFFER_SIZE];
+    int read_size = 0, len = 0;
+    FILE *dl_file;
+    char command[8], arg[64];
+    char file_loc[128];
+    int sock = config_dfc.dfs_fd[1];
+    int i;
 
+    sscanf(line, "%s %s", command, arg);
+    sprintf(file_loc, "./%s", arg);
+    if(write(sock, line, strlen(line)) < 0) {
+        puts("GET failed");
+        // errexit("Error in List: %s\n", strerror(errno));
+    }
+    dl_file = fopen(file_loc, "w");
+    if (dl_file == NULL)
+    {
+        printf("Error opening file!\n");
+        exit(1);
+    }
+    while ((read_size = recv(sock, &buf[len], (BUFFER_SIZE-len), 0)) > 0)
+    { 
+        char line[read_size];
+        strncpy(line, &buf[len], sizeof(line));
+        len += read_size;
+        line[read_size] = '\0';
+
+        printf("%s\n", line);
+        fprintf(dl_file, "%s\n", line);
+        fclose(dl_file);
+        return 1;
+    }
     return 0;
 }
 
@@ -166,6 +198,7 @@ void process_request_client(int sock){
                 printf("GET needs an argument\n");
             else
                 printf("GET CALLED!\n");
+                get(line);
         } else if (!strncasecmp(command, "PUT", 3)) {
             if (strlen(line) <= 4)
                 printf("PUT needs an argument\n");
