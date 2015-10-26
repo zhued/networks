@@ -53,6 +53,7 @@ int put(char *name);
 // }
 
 void auth_user(int sock, char * username, char * password){
+    // char server_reply[BUFFER_SIZE];
     char *result = malloc(strlen(username)+strlen(password));//+1 for the zero-terminator
     strcpy(result, "AUTH:");
     strcat(result, username);
@@ -62,13 +63,18 @@ void auth_user(int sock, char * username, char * password){
         printf("Authentication failed\n");
         // errexit("Error in Authentication: %s\n", strerror(errno));
     }
-    // printf("Authentication success!\n");
 }
 
 void list() {
-    
+    // can list all files on one server
+    // When distributed works, this will look into all server directories
 }
 
+/*
+Pull a file from server because GET requested
+Reference:
+http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
+*/
 int get(char *line) {
     char buf[BUFFER_SIZE];
     int read_size = 0, len = 0;
@@ -76,7 +82,7 @@ int get(char *line) {
     char command[8], arg[64];
     char file_loc[128];
     int sock = config_dfc.dfs_fd[1];
-    int i;
+    // int i;
 
     sscanf(line, "%s %s", command, arg);
     sprintf(file_loc, "./%s", arg);
@@ -85,8 +91,7 @@ int get(char *line) {
         // errexit("Error in List: %s\n", strerror(errno));
     }
     dl_file = fopen(file_loc, "w");
-    if (dl_file == NULL)
-    {
+    if (dl_file == NULL){
         printf("Error opening file!\n");
         exit(1);
     }
@@ -105,9 +110,86 @@ int get(char *line) {
     return 0;
 }
 
-int put(char *name) {
+/*
+Push a file to Server because PUT requested
 
-    return 0;
+This File is pretty much reverse idea of get; instead of pulling from server and writing 
+to this directory, it will take a file in this directory and write it to server
+
+Reference:
+http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
+*/
+int put(char *line) {
+    // struct timespec tim;
+    // tim.tv_sec = 0;
+    // tim.tv_nsec = 100000000L; /* 0.1 seconds */
+
+    char file_loc[128];
+    int fd;
+    char file_size[256];
+    int size;
+    struct stat file_stat;
+    char command[8], arg[64];
+    char buffer[BUFFER_SIZE];
+    // int remaining = va_arg(args, off_t);
+    // char server_reply[BUFFER_SIZE];
+    int sock = config_dfc.dfs_fd[1];
+    char * files = "./premade_files";
+
+    sscanf(line, "%s %s", command, arg);
+    printf("command %s\n", command);
+    printf("arg %s\n", arg);
+    sprintf(file_loc, "%s/%s", files, arg);
+    printf("file location %s\n", file_loc);
+
+    if(write(sock, line, strlen(line)) < 0) {
+        puts("List failed");
+        // errexit("Error in List: %s\n", strerror(errno));
+    }
+
+    if ((fd = open(file_loc, O_RDONLY)) < 0)
+        printf("Failed to open file\n");
+        // errexit("Failed to open file at: '%s' %s\n", file_loc, strerror(errno)); 
+
+    if (fstat(fd, &file_stat) < 0)
+        printf("Error fstat\n");
+        // errexit("Error fstat file at: '%s' %s\n", file_loc, strerror(errno));
+
+    size = file_stat.st_size;
+    sprintf(file_size, "%d", size);
+    
+    if (write(sock, file_size, sizeof(file_size)) < 0)
+        printf("Error in write\n");
+        // errexit("Echo write: %s\n", strerror(errno));
+
+    // nanosleep(&tim, NULL); 
+
+    while (1) {
+        // Read data into buffer.  We may not have enough to fill up buffer, so we
+        // store how many bytes were actually read in bytes_read.
+        int bytes_read = read(fd, buffer, sizeof(buffer));
+        if (bytes_read == 0) // We're done reading from the file
+            break;
+
+        if (bytes_read < 0) {
+            // handle errors
+        }
+
+        // You need a loop for the write, because not all of the data may be written
+        // in one call; write will return how many bytes were written. p keeps
+        // track of where in the buffer we are, while we decrement bytes_read
+        // to keep track of how many bytes are left to write.
+        void *p = buffer;
+        while (bytes_read > 0) {
+            int bytes_written = write(sock, p, bytes_read);
+            if (bytes_written <= 0) {
+                // handle errors
+            }
+            bytes_read -= bytes_written;
+            p += bytes_written;
+        }
+    }
+    return 0;  
 }
 
 /*
@@ -168,7 +250,7 @@ http://stephen-brennan.com/2015/01/16/write-a-shell-in-c/
 void process_request_client(int sock){
     char *line = NULL, command[8], arg[64];
     // char *token;
-    ssize_t len = 0;
+    size_t len = 0;
     ssize_t read;
     int status = 1;
 
@@ -204,6 +286,7 @@ void process_request_client(int sock){
                 printf("PUT needs an argument\n");
             else
                 printf("PUT CALLED!\n");
+                put(line);
         } else if (!strncasecmp(command, "q", 1)) {
             status = 0;
         } else {

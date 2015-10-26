@@ -44,10 +44,8 @@ struct Config {
 void parse_config(const char *);
 int check_user(int , char * , char * );
 void list(int, char *);
-// requestFileCheck(char * );
-// void checkFileCurrServ(int , char * );
 void get(char *, int);
-int put(char *name);
+void put(char * , int );
 
 int check_user(int socket, char * username, char * password) 
 {
@@ -105,6 +103,11 @@ void parse_config(const char *filename) {
     fclose(conf_file);
 }
 
+/*
+go through directory and print out the files
+Reference:
+http://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
+*/
 void list_server(int socket, char * username) {
     printf("Getting Files for: %s\n", username);
     DIR * d;
@@ -198,11 +201,53 @@ void get( char * send_file, int sock) {
 }
 
 
-int put(char *name) {
+void put( char * send_file, int sock) {
+    char buf[BUFFER_SIZE];
+    char file_path[128];
+    int file_size, remaining, len = 0;
+    int len2;
+    FILE *file;
 
-    return 0;
+    sprintf(file_path, "%s%s/", server_dir, server_conf.current_user_name);
+    strncat(file_path, send_file, strlen(send_file));
+    printf("%s\n", file_path);
+
+    int read_size;
+    while((read_size = recv(sock, &buf[len], (BUFFER_SIZE-len), 0)) > 0)
+    {
+        char line[read_size];
+        strncpy(line, &buf[len], sizeof(line));
+        len += read_size;
+        line[read_size] = '\0';
+        // printf("Buf is %s\n", buf);
+        // puts(buf);
+        file_size = atoi(buf);
+        printf("%d\n", file_size);
+        if (!(file = fopen(file_path, "w")))
+            printf("failed to open file\n");
+            // errexit("Failed to open file at: '%s' %s\n", file_path, strerror(errno)); 
+
+        remaining = file_size;
+        while (((len2 = recv(sock, buf, BUFFER_SIZE, 0)) > 0) && (remaining > 0)) {
+            printf("%s\n", buf);
+
+            // write to file
+            fprintf(file, "%s\n", buf);
+            fclose(file);
+
+            fwrite(buf, sizeof(char), len, file);
+            remaining -= len;
+
+            // fprintf(stdout, "Received %d bytes\n", len);
+            return;
+        }
+    }
 }
 
+/*
+ Listens to what the client sends to the server.
+ First authenticates the user, then next ones are listening for LIST, GET, POST requests
+*/
 void process_request_server(int socket){
     char buf[BUFFER_SIZE];
     char arg[64];
@@ -221,7 +266,6 @@ void process_request_server(int socket){
 
         printf("Found:  %s\n", line);
 
-        // printf("Line: %s\n", command);
         if (strncmp(line, "AUTH:", 5) == 0)
         {
             token = strtok(line, ": ");
@@ -232,17 +276,7 @@ void process_request_server(int socket){
         }
         sscanf(line, "%s %s", command, arg);
 
-        if(strncmp(command, "LIST", 4) == 0) {
-            printf("LIST CALLED:\n");
-            list_server(socket, username);
-        } else if (strncmp(command, "GET", 3) == 0) {
-            printf("GET CALLED!\n");
-            // serverGet(socket, arg);
-            get(arg, socket);
-        } else if(strncmp(command, "PUT", 3) == 0){
-            printf("PUT Called!\n");
-            // serverPut(socket, arg);
-        } else if(strncmp(command, "AUTH", 4) == 0) {
+        if(strncmp(command, "AUTH", 4) == 0) {
             if (check_user(socket, username, password) < 0){
                 char *message = "Invalid Username/Password. Please try again.\n";
                 write(socket, message, strlen(message));
@@ -250,6 +284,15 @@ void process_request_server(int socket){
                 printf("socket closed\n");
                 return;
             }
+        } else if(strncmp(command, "LIST", 4) == 0) {
+            printf("LIST CALLED:\n");
+            list_server(socket, username);
+        } else if (strncmp(command, "GET", 3) == 0) {
+            printf("GET CALLED!\n");
+            get(arg, socket);
+        } else if(strncmp(command, "PUT", 3) == 0){
+            printf("PUT Called!\n");
+            put(arg, socket);
         } else {
             printf("Unsupported Command: %s\n", command);
         }
@@ -359,188 +402,3 @@ int main(int argc, char *argv[]) {
 
     return EXIT_SUCCESS;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// int requestFileCheck(char * filename){
-
-//     //Connect to Each Servers
-//     // char host[9] = "localhost";
-//     static int currport = 10001;
-//     char res[2];
-//     int servfd = 0;
-
-//     char command[MAXLINE];
-
-//     sprintf(command, "CHECK %s %s %s\n", currUser.name, currUser.passwd, filename);
-
-//     // printf("Command RFC: %s\n", command);
-
-//     for(currport = 10001; currport<10005; currport++){
-
-//         // printf("Port: %d\n", currport);    
-
-//         if (currport == serverPort){
-
-//         } else {
-//             //Connect to Other Server
-//             // printf("Trying to connect to server: %d\n", currport);
-
-//             servfd = open_clientfd("localhost", currport);
-
-//             //TODO 1 sec timeout
-
-//             write(servfd, command, strlen(command));
-//             readline(servfd, res, 2);
-
-//             // printf("We read: %s %d\n", res, strncmp(res, "1", 1));
-
-//             if(strncmp(res, "1", 1) == 0){
-//                 // printf("WE FOUND IT!\n");
-//                 return 1;
-//             }
-//             close(servfd);
-//         }
-//     }
-
-//     return 0;
-// }
-
-
-// void checkFileCurrServ(int connfd, char * filename){
-//     char ext[8] = "";
-//     char filenopart[256] = "";
-//     char currpart[256] = "";
-//     char path[256] = "";
-
-//     int fd;
-
-//     strcpy(filenopart, strtok (filename, "."));
-
-//     strcpy(ext, strtok (NULL, "."));
-
-//     if (strtok (NULL, ".") != NULL){
-//         sprintf(filenopart, "%s.%s", filenopart, ext);
-//     } 
-
-//     //TODO Check to See if we Already Saw that File
-
-//     printf("Filename: %s\n",filenopart);
-
-//     int part1 = 0;
-//     int part2 = 0;
-//     int part3 = 0;
-//     int part4 = 0;
-
-//     //Check Current Server for Part
-//     sprintf(path, "%s%s/", serverDir, currUser.name);
-
-//     strcpy(currpart, filenopart);
-//     strcat(currpart, ".1");
-
-//     strcat(path, currpart);
-
-//     // printf("Path: %s FD: %d\n", path, access( path, F_OK ));
-
-//     if ((fd = open(path, O_RDONLY)) != -1){
-//         part1 = 1;  
-//         // printf("CWe found part1\n");
-
-//     } else {
-//         if (requestFileCheck(currpart)){
-//             // printf("SWe found part1\n");
-//             part1 = 1;
-//         }
-//     }
-//     close(fd);
-
-//     sprintf(path, "%s%s/", serverDir, currUser.name);
-
-//     strcpy(currpart, filenopart);
-//     strcat(currpart, ".2");
-
-//     strcat(path, currpart);
-
-//     if ((fd = open(path, O_RDONLY)) != -1){
-//         part2 = 1;  
-//         // printf("CWe found part3\n");
-//     } else {
-//         if (requestFileCheck(currpart)){
-//             part2 = 1;
-//             // printf("SWe found part3\n");
-//         }
-//     }
-//     close(fd);
-
-
-//     sprintf(path, "%s%s/", serverDir, currUser.name);
-
-//     strcpy(currpart, filenopart);
-//     strcat(currpart, ".3");
-
-//     strcat(path, currpart);
-
-//     if ((fd = open(path, O_RDONLY) != -1)){
-//         part3 = 1;  
-//         // printf("CWe found part3\n");
-
-//     } else {
-//         if (requestFileCheck(currpart)){
-//             part3 = 1;
-//             // printf("SWe found part3\n");
-
-//         }
-//     }
-//     close(fd);
-
-//     sprintf(path, "%s%s/", serverDir, currUser.name);
-
-//     strcpy(currpart, filenopart);
-//     strcat(currpart, ".4");
-
-//     strcat(path, currpart);
-
-//     if ((fd = open(path, O_RDONLY) != -1)){
-//         part4 = 1;  
-//         // printf("CWe found part4\n");
-
-//     } else {
-//         if (requestFileCheck(currpart)){
-//             part4 = 1;
-//             // printf("SWe found part4\n");
-//         }
-//     }
-//     close(fd);
-
-//     if ((part1+part2+part3+part4) == 4){
-//         printf("File Found!: %s\n", filenopart );
-//         write(connfd, filenopart, strlen(filenopart));
-//         write(connfd, "\n", 1);
-//     } else {
-//         write(connfd, filenopart, strlen(filenopart));
-//         write(connfd, " [incomplete]", 13);
-//         write(connfd, "\n", 1);
-//     }
-
-// }
