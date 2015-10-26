@@ -6,7 +6,6 @@
     dfc.c
     Distributive Filesystem Server
 
-
 */
 
 #include <stdio.h>
@@ -19,6 +18,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <dirent.h>
+#include <stdarg.h>
 // #include <err.h>
 // #include <fcntl.h>
 
@@ -43,6 +43,7 @@ struct Config {
 
 void parse_config(const char *);
 int check_user(int , char * , char * );
+int errexit(const char *, ...);
 void list(int, char *);
 void get(char *, int);
 void put(char * , int );
@@ -71,6 +72,15 @@ int check_user(int socket, char * username, char * password)
     }
     printf("User NOT Authenticated.\n");
     return -1;
+}
+
+int errexit(const char *format, ...) {
+        va_list args;
+
+        va_start(args, format);
+        vfprintf(stderr, format, args);
+        va_end(args);
+        exit(1);
 }
 
 void parse_config(const char *filename) {
@@ -178,8 +188,7 @@ void get( char * send_file, int sock) {
 
         if (bytes_read < 0) {
             // handle errors
-            printf("Failed to read\n");
-            // errexit("Failed to read: %s\n", strerror(errno));
+            errexit("Failed to read: %s\n", strerror(errno));
         }
 
         // You need a loop for the write, because not all of the data may be written
@@ -200,47 +209,44 @@ void get( char * send_file, int sock) {
     }
 }
 
+/*
+Push a file to Server because PUT requested
 
+This function is pretty much reverse idea of get; instead of pulling from server and writing 
+to this directory, it will take a file in this directory and write it to server
+
+Reference:
+http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
+*/
 void put( char * send_file, int sock) {
     char buf[BUFFER_SIZE];
     char file_path[128];
-    int file_size, remaining, len = 0;
-    int len2;
-    FILE *file;
+    // int file_size, remaining;
+    int len = 0;
+    // int len2;
+    int read_size;
+    FILE *put_file;
 
     sprintf(file_path, "%s%s/", server_dir, server_conf.current_user_name);
     strncat(file_path, send_file, strlen(send_file));
-    printf("%s\n", file_path);
+    printf("file path is %s\n", file_path);
 
-    int read_size;
-    while((read_size = recv(sock, &buf[len], (BUFFER_SIZE-len), 0)) > 0)
-    {
+    put_file = fopen(file_path, "w");
+    if (put_file == NULL){
+        printf("Error opening file!\n");
+        exit(1);
+    }
+    
+    while ((read_size = recv(sock, &buf[len], (BUFFER_SIZE-len), 0)) > 0)
+    { 
         char line[read_size];
         strncpy(line, &buf[len], sizeof(line));
         len += read_size;
         line[read_size] = '\0';
-        // printf("Buf is %s\n", buf);
-        // puts(buf);
-        file_size = atoi(buf);
-        printf("%d\n", file_size);
-        if (!(file = fopen(file_path, "w")))
-            printf("failed to open file\n");
-            // errexit("Failed to open file at: '%s' %s\n", file_path, strerror(errno)); 
 
-        remaining = file_size;
-        while (((len2 = recv(sock, buf, BUFFER_SIZE, 0)) > 0) && (remaining > 0)) {
-            printf("%s\n", buf);
-
-            // write to file
-            fprintf(file, "%s\n", buf);
-            fclose(file);
-
-            fwrite(buf, sizeof(char), len, file);
-            remaining -= len;
-
-            // fprintf(stdout, "Received %d bytes\n", len);
-            return;
-        }
+        printf("%s\n", line);
+        fprintf(put_file, "%s\n", line);
+        fclose(put_file);
     }
 }
 

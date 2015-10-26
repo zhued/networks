@@ -18,6 +18,7 @@
 #include <err.h>
 #include <fcntl.h>
 #include <sys/errno.h>
+#include <stdarg.h>
 
 #include <ctype.h>
 #include <strings.h>
@@ -39,30 +40,28 @@ struct Config {
 int parse_config(const char *);
 void process_request_client(int);
 int connect_to_server(int, const char *);
-// void authenticateUser(int, char *, char *);
+int errexit(const char *, ...);
 void list();
 int get(char *name);
 int put(char *name);
 
-// int errexit(const char *format, ...) {
-//         va_list args;
-//         va_start(args, format);
-//         vfprintf(stderr, format, args);
-//         va_end(args);
-//         exit(1);
-// }
-
 void auth_user(int sock, char * username, char * password){
-    // char server_reply[BUFFER_SIZE];
     char *result = malloc(strlen(username)+strlen(password));//+1 for the zero-terminator
     strcpy(result, "AUTH:");
     strcat(result, username);
     strcat(result, " ");
     strcat(result, password);
     if (write(sock, result, strlen(result)) < 0){
-        printf("Authentication failed\n");
-        // errexit("Error in Authentication: %s\n", strerror(errno));
+        errexit("Error in Authentication: %s\n", strerror(errno));
     }
+}
+
+int errexit(const char *format, ...) {
+        va_list args;
+        va_start(args, format);
+        vfprintf(stderr, format, args);
+        va_end(args);
+        exit(1);
 }
 
 void list() {
@@ -71,7 +70,7 @@ void list() {
 }
 
 /*
-Pull a file from server because GET requested
+Pull/write a file from server because GET requested
 Reference:
 http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
 */
@@ -87,8 +86,7 @@ int get(char *line) {
     sscanf(line, "%s %s", command, arg);
     sprintf(file_loc, "./%s", arg);
     if(write(sock, line, strlen(line)) < 0) {
-        puts("GET failed");
-        // errexit("Error in List: %s\n", strerror(errno));
+        errexit("Error in GET: %s\n", strerror(errno));
     }
     dl_file = fopen(file_loc, "w");
     if (dl_file == NULL){
@@ -105,81 +103,64 @@ int get(char *line) {
         printf("%s\n", line);
         fprintf(dl_file, "%s\n", line);
         fclose(dl_file);
-        return 1;
     }
     return 0;
+    printf("FINISHED GET\n");
 }
 
 /*
 Push a file to Server because PUT requested
 
-This File is pretty much reverse idea of get; instead of pulling from server and writing 
+This function is pretty much reverse idea of get; instead of pulling from server and writing 
 to this directory, it will take a file in this directory and write it to server
 
 Reference:
 http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
 */
 int put(char *line) {
+    // struct timeval timeout;
     // struct timespec tim;
     // tim.tv_sec = 0;
     // tim.tv_nsec = 100000000L; /* 0.1 seconds */
 
     char file_loc[128];
     int fd;
-    char file_size[256];
-    int size;
-    struct stat file_stat;
-    char command[8], arg[64];
-    char buffer[BUFFER_SIZE];
-    // int remaining = va_arg(args, off_t);
-    // char server_reply[BUFFER_SIZE];
-    int sock = config_dfc.dfs_fd[1];
+    char buf[BUFFER_SIZE];
     char * files = "./premade_files";
+    int sock = config_dfc.dfs_fd[1];
+    char command[8], arg[64];
+
 
     sscanf(line, "%s %s", command, arg);
-    printf("command %s\n", command);
-    printf("arg %s\n", arg);
     sprintf(file_loc, "%s/%s", files, arg);
     printf("file location %s\n", file_loc);
 
+    // sprintf(file_loc, "%s%s/%s", server_dir, server_conf.current_user_name, send_file);
+
     if(write(sock, line, strlen(line)) < 0) {
-        puts("List failed");
-        // errexit("Error in List: %s\n", strerror(errno));
+        errexit("Error in PUT: %s\n", strerror(errno));
     }
 
     if ((fd = open(file_loc, O_RDONLY)) < 0)
-        printf("Failed to open file\n");
-        // errexit("Failed to open file at: '%s' %s\n", file_loc, strerror(errno)); 
-
-    if (fstat(fd, &file_stat) < 0)
-        printf("Error fstat\n");
-        // errexit("Error fstat file at: '%s' %s\n", file_loc, strerror(errno));
-
-    size = file_stat.st_size;
-    sprintf(file_size, "%d", size);
-    
-    if (write(sock, file_size, sizeof(file_size)) < 0)
-        printf("Error in write\n");
-        // errexit("Echo write: %s\n", strerror(errno));
-
-    // nanosleep(&tim, NULL); 
-
+        errexit("Failed to open file at: '%s' %s\n", file_loc, strerror(errno)); 
     while (1) {
         // Read data into buffer.  We may not have enough to fill up buffer, so we
         // store how many bytes were actually read in bytes_read.
-        int bytes_read = read(fd, buffer, sizeof(buffer));
+        int bytes_read = read(fd, buf, sizeof(buf));
         if (bytes_read == 0) // We're done reading from the file
             break;
 
         if (bytes_read < 0) {
-            // handle errors
+            errexit("Failed to read: %s\n", strerror(errno));
         }
 
         // You need a loop for the write, because not all of the data may be written
         // in one call; write will return how many bytes were written. p keeps
         // track of where in the buffer we are, while we decrement bytes_read
         // to keep track of how many bytes are left to write.
-        void *p = buffer;
+        void *p = buf;
+        printf("Writing back into sock\n");
+
         while (bytes_read > 0) {
             int bytes_written = write(sock, p, bytes_read);
             if (bytes_written <= 0) {
@@ -189,7 +170,8 @@ int put(char *line) {
             p += bytes_written;
         }
     }
-    return 0;  
+    return 0; 
+    printf("FINISHED PUT\n");
 }
 
 /*
@@ -265,13 +247,13 @@ void process_request_client(int sock){
         if (!strncasecmp(command, "LIST", 4)) {
             char reply[BUFFER_SIZE];
             if(write(sock, command, strlen(command)) < 0) {
-                puts("List failed");
-                // errexit("Error in List: %s\n", strerror(errno));
+                // puts("List failed");
+                errexit("Error in List: %s\n", strerror(errno));
             }
             if( recv(sock, reply, 2000, 0) < 0)
             {
-                // errexit("Error in recv: %s\n", strerror(errno));
-                puts("recv failed");
+                errexit("Error in recv: %s\n", strerror(errno));
+                // puts("recv failed");
             } else {
                 printf("%s\n", reply);
             }
@@ -314,7 +296,6 @@ int connect_to_server(int port, const char *host){
         printf("Could not create socket");
     }
 
-    printf("port num %d\n", port);
     server.sin_addr.s_addr = inet_addr(host);
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
