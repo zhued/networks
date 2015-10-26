@@ -19,14 +19,10 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <stdarg.h>
-// #include <err.h>
-// #include <fcntl.h>
-
-// #include <ctype.h>
-// #include <strings.h>
 #include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <openssl/md5.h>
 
 int BUFFER_SIZE = 2048;
 char server_dir[256] = ".";
@@ -44,10 +40,17 @@ struct Config {
 void parse_config(const char *);
 int check_user(int , char * , char * );
 int errexit(const char *, ...);
-void list(int, char *);
+void listserver(int, char *);
 void get(char *, int);
 void put(char * , int );
+void process_request_server(int);
+int open_port(int);
 
+/*
+check if a user and their password is in the conf file.
+If it isn't then return that User is not authorized
+If it is, then keep on going with commands.
+*/
 int check_user(int socket, char * username, char * password) 
 {
     int i;
@@ -74,15 +77,21 @@ int check_user(int socket, char * username, char * password)
     return -1;
 }
 
+/*
+Used to show error and also exit at the same time
+So I don't have to perror and exit and all that stuff anymore
+*/
 int errexit(const char *format, ...) {
         va_list args;
-
         va_start(args, format);
         vfprintf(stderr, format, args);
         va_end(args);
         exit(1);
 }
 
+/*
+Similar parser like the client and also my webserver
+*/
 void parse_config(const char *filename) {
     char *line;
     char Name[BUFFER_SIZE], Pass[BUFFER_SIZE];
@@ -115,6 +124,7 @@ void parse_config(const char *filename) {
 
 /*
 go through directory and print out the files
+
 Reference:
 http://stackoverflow.com/questions/4204666/how-to-list-files-in-a-directory-in-a-c-program
 */
@@ -126,7 +136,6 @@ void list_server(int socket, char * username) {
     int status;
     int i = 0;
 
-    // char tempresult[128];
     char result[256];
 
     char path[BUFFER_SIZE];
@@ -138,6 +147,7 @@ void list_server(int socket, char * username) {
     d = opendir(directory);
     int length = 0;
 
+    // Skip the '..' in a folder and get all the files
     if (d) {
         while ((dir = readdir(d)) != NULL) {
             if (strcmp(".", dir->d_name) == 0){
@@ -145,17 +155,11 @@ void list_server(int socket, char * username) {
             } else {
                 sprintf(path, "%s/%s", directory, dir->d_name);
                 status = lstat(path, &filedets);
-                if(S_ISDIR(filedets.st_mode)) {
-                    // Skip directories
-                } else {
-                    if(strncmp(dir->d_name, ".DS_Store", 9) != 0)
-                    {
-                        length += sprintf(result + length, "%d. %s\n", i, dir->d_name);
-                        //TODO: Check for Pieces on Other Servers
-                        i++;
-                        // continue;
-                    }
-                }
+                length += sprintf(result + length, "%d. %s\n", i, dir->d_name);
+                // This is where I would check other servers for
+                // other files
+                i++;
+
             }
         }
         printf("FILES FOUND: \n %s\n", result);
@@ -166,43 +170,33 @@ void list_server(int socket, char * username) {
 
 /*
 Push a file to client because GET requested
+
 Reference:
 http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
 */
 void get( char * send_file, int sock) {
-    char file_loc[128];
+    char file_path[128];
     int fd;
     char buf[BUFFER_SIZE];
 
-    sprintf(file_loc, "%s%s/%s", server_dir, server_conf.current_user_name, send_file);
+    sprintf(file_path, "%s%s/%s", server_dir, server_conf.current_user_name, send_file);
 
-    if ((fd = open(file_loc, O_RDONLY)) < 0)
-        printf("failed to open file\n");
-        // errexit("Failed to open file at: '%s' %s\n", file_loc, strerror(errno)); 
+    if ((fd = open(file_path, O_RDONLY)) < 0)
+        errexit("Failed to open file at: '%s' %s\n", file_path, strerror(errno)); 
     while (1) {
-        // Read data into buffer.  We may not have enough to fill up buffer, so we
-        // store how many bytes were actually read in bytes_read.
+        // Read data into buffer
         int bytes_read = read(fd, buf, sizeof(buf));
         if (bytes_read == 0) // We're done reading from the file
             break;
-
         if (bytes_read < 0) {
-            // handle errors
             errexit("Failed to read: %s\n", strerror(errno));
         }
 
-        // You need a loop for the write, because not all of the data may be written
-        // in one call; write will return how many bytes were written. p keeps
-        // track of where in the buffer we are, while we decrement bytes_read
-        // to keep track of how many bytes are left to write.
+        // Write to the socket what is in the file
         void *p = buf;
         printf("Writing back into sock\n");
-
         while (bytes_read > 0) {
             int bytes_written = write(sock, p, bytes_read);
-            if (bytes_written <= 0) {
-                // handle errors
-            }
             bytes_read -= bytes_written;
             p += bytes_written;
         }
@@ -221,22 +215,23 @@ http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-pro
 void put( char * send_file, int sock) {
     char buf[BUFFER_SIZE];
     char file_path[128];
-    // int file_size, remaining;
     int len = 0;
-    // int len2;
     int read_size;
     FILE *put_file;
 
+    // Set the file path to the server_dir/username/file
+    // like - DFS1/Alice/put.txt
     sprintf(file_path, "%s%s/", server_dir, server_conf.current_user_name);
     strncat(file_path, send_file, strlen(send_file));
     printf("file path is %s\n", file_path);
 
+    // open file with write permission
     put_file = fopen(file_path, "w");
     if (put_file == NULL){
-        printf("Error opening file!\n");
+        printf("Error opening file\n");
         exit(1);
     }
-    
+    // fprintf all concents in the buffer into the file on server
     while ((read_size = recv(sock, &buf[len], (BUFFER_SIZE-len), 0)) > 0)
     { 
         char line[read_size];
@@ -263,6 +258,7 @@ void process_request_server(int socket){
     int len = 0;
     char command[256];
 
+    // Keep reading in what client sends
     while ((read_size = recv(socket, &buf[len], (BUFFER_SIZE-len), 0)) > 0)
     { 
         char line[read_size];
@@ -272,6 +268,8 @@ void process_request_server(int socket){
 
         printf("Found:  %s\n", line);
 
+        // Authentication finds username and password
+        // and checks them with all the accounts in the conf file
         if (strncmp(line, "AUTH:", 5) == 0)
         {
             token = strtok(line, ": ");
@@ -281,7 +279,6 @@ void process_request_server(int socket){
             strcpy(password, token);
         }
         sscanf(line, "%s %s", command, arg);
-
         if(strncmp(command, "AUTH", 4) == 0) {
             if (check_user(socket, username, password) < 0){
                 char *message = "Invalid Username/Password. Please try again.\n";
@@ -290,6 +287,7 @@ void process_request_server(int socket){
                 printf("socket closed\n");
                 return;
             }
+        // Authentication done. Now onto LIST, GET, and PUT
         } else if(strncmp(command, "LIST", 4) == 0) {
             printf("LIST CALLED:\n");
             list_server(socket, username);
@@ -298,7 +296,7 @@ void process_request_server(int socket){
             get(arg, socket);
         } else if(strncmp(command, "PUT", 3) == 0){
             printf("PUT Called!\n");
-            put(arg, socket);
+            put(arg, socket); 
         } else {
             printf("Unsupported Command: %s\n", command);
         }
@@ -312,7 +310,6 @@ void process_request_server(int socket){
     {
         perror("recv failed");
     }
-     
     return;
 }
 
@@ -323,12 +320,12 @@ void process_request_server(int socket){
  http://www.binarytides.com/server-client-example-c-sockets-linux/
 */
 int open_port(int port){
-    int socket_desc , client_sock, c, *new_sock;
+    int sockfd , client_sock, c, *new_sock;
     struct sockaddr_in server , client;
      
     //Create socket
-    socket_desc = socket(AF_INET , SOCK_STREAM , IPPROTO_TCP);
-    if (socket_desc == -1)
+    sockfd = socket(AF_INET , SOCK_STREAM , IPPROTO_TCP);
+    if (sockfd == -1)
     {
         printf("Could not create socket\n");
     }
@@ -338,37 +335,44 @@ int open_port(int port){
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons(port);
+
+    // timeouts on socket
+    struct timeval timeout;      
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+    if (setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+        perror("setsockopt failed\n");
+
+    if (setsockopt (sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+        perror("setsockopt failed\n");
      
-    //Bind
-    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
+    //Bind socket to address
+    if( bind(sockfd,(struct sockaddr *)&server , sizeof(server)) < 0)
     {
-        //print the error message
         perror("bind failed. Error");
         return 1;
     }
-    printf("bind done\n");
+    printf("Bind Complete\n");
      
-    //Listen
-    listen(socket_desc , 3);
+    //Listen on socket
+    listen(sockfd , 3);
      
     //Accept and incoming connection
-    printf("Waiting for incoming connections...\n");
+    printf("Waiting for incoming connections..\n");
     c = sizeof(struct sockaddr_in);
-    while( (client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c)) )
+    while( (client_sock = accept(sockfd, (struct sockaddr *)&client, (socklen_t*)&c)) )
     {
         printf("Connection accepted\n");
         new_sock = malloc(1);
         *new_sock = client_sock;
          
+        // fork it so multiple connections can come in
         if(fork() == 0){
             printf("Connected! %d\n", port);         
             process_request_server(client_sock);    
             exit(0);        
         }
-         
-        printf("Handler assigned\n");
     }
-     
     if (client_sock < 0)
     {
         perror("accept failed");

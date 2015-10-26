@@ -5,6 +5,7 @@
 
     dfc.c
     Distributive Filesystem Client
+    
 */
 
 #include <stdio.h>
@@ -19,15 +20,13 @@
 #include <fcntl.h>
 #include <sys/errno.h>
 #include <stdarg.h>
-
-#include <ctype.h>
-#include <strings.h>
 #include <string.h>
 #include <sys/stat.h>
 // #include <openssl/md5.h>
 
-int BUFFER_SIZE = 1024;
-int MAXSIZE = 8192;
+#define REQ_TIMEOUT 1
+#define BUFFER_SIZE 1024
+#define MAXSIZE 8192
 
 struct Config {
     char    dfs_host[5][20];
@@ -37,14 +36,21 @@ struct Config {
     char    Password[128];
 } config_dfc;
 
+void auth_user(int, char * , char * );
+void list();
+int get(char *name);
+int put(char *name);
 int parse_config(const char *);
 void process_request_client(int);
 int connect_to_server(int, const char *);
 int errexit(const char *, ...);
-void list();
-int get(char *name);
-int put(char *name);
 
+
+/*
+sends a command with "AUTH" as command to make sure that the
+user and their password is in the system or not
+Error will be thrown if user/pass don't match any in the dfs.conf
+*/
 void auth_user(int sock, char * username, char * password){
     char *result = malloc(strlen(username)+strlen(password));//+1 for the zero-terminator
     strcpy(result, "AUTH:");
@@ -56,6 +62,10 @@ void auth_user(int sock, char * username, char * password){
     }
 }
 
+/*
+Used to show error and also exit at the same time
+So I don't have to perror and exit and all that stuff anymore
+*/
 int errexit(const char *format, ...) {
         va_list args;
         va_start(args, format);
@@ -79,16 +89,16 @@ int get(char *line) {
     int read_size = 0, len = 0;
     FILE *dl_file;
     char command[8], arg[64];
-    char file_loc[128];
+    char file_path[128];
     int sock = config_dfc.dfs_fd[1];
-    // int i;
 
+    // make file path the root of dir
     sscanf(line, "%s %s", command, arg);
-    sprintf(file_loc, "./%s", arg);
+    sprintf(file_path, "./%s", arg);
     if(write(sock, line, strlen(line)) < 0) {
         errexit("Error in GET: %s\n", strerror(errno));
     }
-    dl_file = fopen(file_loc, "w");
+    dl_file = fopen(file_path, "w");
     if (dl_file == NULL){
         printf("Error opening file!\n");
         exit(1);
@@ -118,34 +128,28 @@ Reference:
 http://stackoverflow.com/questions/2014033/send-and-receive-a-file-in-socket-programming-in-linux-with-c-c-gcc-g
 */
 int put(char *line) {
-    // struct timeval timeout;
-    // struct timespec tim;
-    // tim.tv_sec = 0;
-    // tim.tv_nsec = 100000000L; /* 0.1 seconds */
-
-    char file_loc[128];
+    char file_path[128];
     int fd;
     char buf[BUFFER_SIZE];
     char * files = "./premade_files";
     int sock = config_dfc.dfs_fd[1];
     char command[8], arg[64];
 
-
+    // make the file path to the premade files directory
     sscanf(line, "%s %s", command, arg);
-    sprintf(file_loc, "%s/%s", files, arg);
-    printf("file location %s\n", file_loc);
+    sprintf(file_path, "%s/%s", files, arg);
+    printf("file location %s\n", file_path);
 
-    // sprintf(file_loc, "%s%s/%s", server_dir, server_conf.current_user_name, send_file);
-
+    // send the line of command to server
     if(write(sock, line, strlen(line)) < 0) {
         errexit("Error in PUT: %s\n", strerror(errno));
     }
 
-    if ((fd = open(file_loc, O_RDONLY)) < 0)
-        errexit("Failed to open file at: '%s' %s\n", file_loc, strerror(errno)); 
+    // Check if you can open the file_path
+    if ((fd = open(file_path, O_RDONLY)) < 0)
+        errexit("Failed to open file at: '%s' %s\n", file_path, strerror(errno)); 
     while (1) {
-        // Read data into buffer.  We may not have enough to fill up buffer, so we
-        // store how many bytes were actually read in bytes_read.
+        // Read data into buffer
         int bytes_read = read(fd, buf, sizeof(buf));
         if (bytes_read == 0) // We're done reading from the file
             break;
@@ -154,10 +158,7 @@ int put(char *line) {
             errexit("Failed to read: %s\n", strerror(errno));
         }
 
-        // You need a loop for the write, because not all of the data may be written
-        // in one call; write will return how many bytes were written. p keeps
-        // track of where in the buffer we are, while we decrement bytes_read
-        // to keep track of how many bytes are left to write.
+        // Write to the socket what is in the file
         void *p = buf;
         printf("Writing back into sock\n");
 
@@ -231,50 +232,48 @@ http://stephen-brennan.com/2015/01/16/write-a-shell-in-c/
 */
 void process_request_client(int sock){
     char *line = NULL, command[8], arg[64];
-    // char *token;
     size_t len = 0;
     ssize_t read;
     int status = 1;
 
     do {
-        printf("Enter Commands> ");
+        printf("\nEnter Commands> ");
         read = getline(&line, &len, stdin);
         line[read-1] = '\0';
 
         sscanf(line, "%s %s", command, arg);
 
-
+        // read from standard in the commands
+        // and then parse them through here
         if (!strncasecmp(command, "LIST", 4)) {
             char reply[BUFFER_SIZE];
             if(write(sock, command, strlen(command)) < 0) {
-                // puts("List failed");
                 errexit("Error in List: %s\n", strerror(errno));
             }
-            if( recv(sock, reply, 2000, 0) < 0)
-            {
+            if( recv(sock, reply, 2000, 0) < 0){
                 errexit("Error in recv: %s\n", strerror(errno));
-                // puts("recv failed");
             } else {
-                printf("%s\n", reply);
+                printf("%s", reply);
             }
         } else if (!strncasecmp(command, "GET", 3)) {
-            if (strlen(line) <= 4)
+            if (strlen(line) <= 4){
                 printf("GET needs an argument\n");
-            else
+            } else{
                 printf("GET CALLED!\n");
                 get(line);
+            }
         } else if (!strncasecmp(command, "PUT", 3)) {
-            if (strlen(line) <= 4)
+            if (strlen(line) <= 4){
                 printf("PUT needs an argument\n");
-            else
+            } else {
                 printf("PUT CALLED!\n");
                 put(line);
+            }
         } else if (!strncasecmp(command, "q", 1)) {
             status = 0;
         } else {
             printf("Unsupported Command: %s\n", command);
         }
-        //printf("%s\n", command);
     } while(status);
 
     printf("Quitting out...\n");
@@ -299,6 +298,16 @@ int connect_to_server(int port, const char *host){
     server.sin_addr.s_addr = inet_addr(host);
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
+
+    // set timeouts on socket
+    struct timeval timeout;      
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+    if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+        perror("setsockopt failed\n");
+
+    if (setsockopt (sock, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+        perror("setsockopt failed\n");
  
     //Connect to remote server
     if (connect(sock, (struct sockaddr *)&server , sizeof(server)) < 0)
@@ -307,6 +316,7 @@ int connect_to_server(int port, const char *host){
         return 1;
     }
 
+    // Check of the user has authentiation on server
     auth_user(sock, config_dfc.Username, config_dfc.Password);
 
     printf("Socket %d connected on port %d\n", sock, ntohs(server.sin_port));
@@ -329,10 +339,8 @@ int main(int argc, char *argv[]) {
 
     // create connection to all servers
     printf("%d servers in conf file\n\n", server_num);
-
     for (i = 1; i < server_num+1; ++i){
         config_dfc.dfs_fd[i]= connect_to_server(config_dfc.dfs_port[i], config_dfc.dfs_host[i]);
-        // printf("fd is %d\n", fd);
     }
 
     // DEBUGGING
