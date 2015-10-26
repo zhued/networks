@@ -4,23 +4,28 @@ Unfortunatly I only programmed one server to work at a time, so it isn't distrib
 
 ## To Run:
 
+```bash
 run 'make'
 
-Server: 
+#Server: 
 ./dfs /DFS1 10001 &
 ./dfs /DFS1 10002 &
 ./dfs /DFS1 10003 &
 ./dfs /DFS1 10004 &
-OR
+#OR
 ./test.sh
 
-Client: 
+#Client: 
 ./dfc dfc.conf or ./dfc dfc1.conf
 
+```
+
 ##Commands:  
-LIST
-GET <filename>
-PUT <filename>
+```bash
+> LIST
+> GET <filename>
+> PUT <filename>
+```
 
 Replace File Name with the desired file.
 
