@@ -22,7 +22,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <openssl/md5.h>
+// #include <openssl/md5.h>
 
 int BUFFER_SIZE = 2048;
 char server_dir[256] = ".";
