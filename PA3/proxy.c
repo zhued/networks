@@ -35,43 +35,115 @@ int errexit(const char *format, ...) {
     Reference:
         http://www.beej.us/guide/bgnet/output/html/singlepage/bgnet.html#getaddrinfo
 */
-void get_request(char *url, char *http_version){
-    struct addrinfo hints, *res, *p;
-    int status;
-    char ipstr[INET6_ADDRSTRLEN];
+void get_request(int sock, char *url, char *http_version, char *request){
+    // int status;
+    struct hostent *server;
+    struct sockaddr_in serveraddr;
+    char response[2048];
 
     if(strncmp(http_version, "HTTP/1.0", 8) == 0){
         printf("HTTP Version is correct!\n");
 
-        // Parse the IP address from the host given from client
-        memset(&hints, 0, sizeof hints);
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM; 
+        server = gethostbyname(url);
 
-        if ((status = getaddrinfo(url, "http", &hints, &res)) != 0) {
-            fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-            exit(1);
+        if (server == NULL){
+            printf("gethostbyname() failed\n");
         }
 
-        p = res;
-        void *addr = NULL;
-        if (p->ai_family == AF_INET) { // IPv4
-            struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
-            addr = &(ipv4->sin_addr);
-        } else {
-            printf("IPv6 not supported!\n");
+    printf("Official name is: %s\n", server->h_name);
+    printf("IP address: %s\n", inet_ntoa(*(struct in_addr*)server->h_addr));
+
+
+        // connect to the server
+        bzero((char *) &serveraddr, server->h_length);
+
+        serveraddr.sin_family = AF_INET;
+        // server.sin_addr.s_addr = inet_addr(host);
+        bcopy((char *)server->h_addr, (char *)&serveraddr.sin_addr.s_addr, server->h_length );
+        serveraddr.sin_port = htons(80);
+
+        int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+        if (connect(tcpSocket, (struct sockaddr *) &serveraddr, sizeof serveraddr ) < 0){
+            printf("\nError Connecting");
         }
 
-        // convert the IP to a string and print it:
-        inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-        freeaddrinfo(res);
+        strcat(request, "\r\n");
+        // Send request to socket
+        if (send(tcpSocket, request, strlen(request), 0) < 0){
+            printf("Error with send()");
+        }
+        bzero(response, 1000);
+        recv(tcpSocket, response, 999, 0);
+        write(sock, response, strlen(response));
 
-        printf("IPv4 address for %s: %s\n", url, ipstr);
-        
     } else {
         printf("HTTP Version is NOT correct!\n");
     }
 }
+// 
+// THIS SHT DONT WORK, I HATE STRING FORMATING IN C HOLY MOTHER OF HESUS
+// 
+// void get_request(char *url, char *http_version, char *request){
+//     struct addrinfo hints, *res, *p;
+//     int status;
+//     char ipstr[INET6_ADDRSTRLEN];
+//     struct sockaddr_in serveraddr;
+//     // char response[1000];
+
+//     if(strncmp(http_version, "HTTP/1.0", 8) == 0){
+//         printf("HTTP Version is correct!\n");
+
+//         // Parse the IP address from the host given from client
+        // memset(&hints, 0, sizeof hints);
+        // hints.ai_family = AF_UNSPEC;
+        // hints.ai_socktype = SOCK_STREAM; 
+
+        // if ((status = getaddrinfo(url, "http", &hints, &res)) != 0) {
+        //     fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+        //     exit(1);
+        // }
+
+        // p = res;
+        // void *addr = NULL;
+        // if (p->ai_family == AF_INET) { // IPv4
+        //     struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+        //     addr = &(ipv4->sin_addr);
+        // } else {
+        //     printf("IPv6 not supported!\n");
+        // }
+
+        // // convert the IP to a string and print it:
+        // inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
+        // freeaddrinfo(res);
+
+//         printf("IPv4 address for %s: %s\n", url, ipstr);
+
+//         // connect to the server
+        
+//         bzero((char *) &serveraddr, sizeof ipstr );
+
+//         serveraddr.sin_family = AF_INET;
+//         // server.sin_addr.s_addr = inet_addr(host);
+//         bcopy((char *)ipstr, (char *)&serveraddr.sin_addr.s_addr, sizeof ipstr );
+//         serveraddr.sin_port = htons(80);
+
+//         int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
+
+//         if (connect(tcpSocket, (struct sockaddr *) &serveraddr, sizeof serveraddr ) < 0){
+//             printf("\nError Connecting");
+//         }
+
+//         strcat(request, "\r\n");
+//         // Send request to socket
+//         if (send(tcpSocket, request, strlen(request), 0) < 0){
+//             printf("Error with send()");
+//         }
+
+//     } else {
+//         printf("HTTP Version is NOT correct!\n");
+//     }
+// }
 
 /*
     Process the request that a client requests
@@ -109,7 +181,7 @@ void process_request(int socket){
 
         // We only support GET
         if(strncmp(command, "GET", 3) == 0) {
-            get_request(url, http_version);
+            get_request(socket, url, http_version, line);
         } else {
             printf("Unsupported Command: %s\n", command);
         }
