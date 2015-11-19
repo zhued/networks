@@ -1,3 +1,13 @@
+/*
+    Edward Zhu
+    Programming Assignment 3
+    Proxy Server - in C
+
+    proxy.c
+    Setting up a Proxy Server
+
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -14,20 +24,6 @@
 #include <sys/stat.h>
 
 int BUFFER_SIZE = 2048;
-
-int errexit(const char *, ...);
-
-/*
-Used to show error and also exit at the same time
-So I don't have to perror and exit and all that stuff anymore
-*/
-int errexit(const char *format, ...) {
-        va_list args;
-        va_start(args, format);
-        vfprintf(stderr, format, args);
-        va_end(args);
-        exit(1);
-}
 
 /*
     Checked if HTTP version is 1.0, then parces IP address
@@ -48,6 +44,7 @@ void get_request(int sock, char *url, char *http_version, char *request){
 
         if (server == NULL){
             printf("gethostbyname() failed\n");
+            printf("URL given is probabaly garbage.\n");
         }
 
     printf("Official name is: %s\n", server->h_name);
@@ -81,69 +78,6 @@ void get_request(int sock, char *url, char *http_version, char *request){
         printf("HTTP Version is NOT correct!\n");
     }
 }
-// 
-// THIS SHT DONT WORK, I HATE STRING FORMATING IN C HOLY MOTHER OF HESUS
-// 
-// void get_request(char *url, char *http_version, char *request){
-//     struct addrinfo hints, *res, *p;
-//     int status;
-//     char ipstr[INET6_ADDRSTRLEN];
-//     struct sockaddr_in serveraddr;
-//     // char response[1000];
-
-//     if(strncmp(http_version, "HTTP/1.0", 8) == 0){
-//         printf("HTTP Version is correct!\n");
-
-//         // Parse the IP address from the host given from client
-        // memset(&hints, 0, sizeof hints);
-        // hints.ai_family = AF_UNSPEC;
-        // hints.ai_socktype = SOCK_STREAM; 
-
-        // if ((status = getaddrinfo(url, "http", &hints, &res)) != 0) {
-        //     fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-        //     exit(1);
-        // }
-
-        // p = res;
-        // void *addr = NULL;
-        // if (p->ai_family == AF_INET) { // IPv4
-        //     struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
-        //     addr = &(ipv4->sin_addr);
-        // } else {
-        //     printf("IPv6 not supported!\n");
-        // }
-
-        // // convert the IP to a string and print it:
-        // inet_ntop(p->ai_family, addr, ipstr, sizeof ipstr);
-        // freeaddrinfo(res);
-
-//         printf("IPv4 address for %s: %s\n", url, ipstr);
-
-//         // connect to the server
-        
-//         bzero((char *) &serveraddr, sizeof ipstr );
-
-//         serveraddr.sin_family = AF_INET;
-//         // server.sin_addr.s_addr = inet_addr(host);
-//         bcopy((char *)ipstr, (char *)&serveraddr.sin_addr.s_addr, sizeof ipstr );
-//         serveraddr.sin_port = htons(80);
-
-//         int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
-
-//         if (connect(tcpSocket, (struct sockaddr *) &serveraddr, sizeof serveraddr ) < 0){
-//             printf("\nError Connecting");
-//         }
-
-//         strcat(request, "\r\n");
-//         // Send request to socket
-//         if (send(tcpSocket, request, strlen(request), 0) < 0){
-//             printf("Error with send()");
-//         }
-
-//     } else {
-//         printf("HTTP Version is NOT correct!\n");
-//     }
-// }
 
 /*
     Process the request that a client requests
@@ -264,7 +198,7 @@ int open_port(int port){
 }
 
 /*
-    Main functions
+    Main function
 */
 int main(int argc, char *argv[]) {
     int port;
