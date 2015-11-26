@@ -1,4 +1,4 @@
-# Proxy Server
+# Proxy Server - Edward Zhu
 
 Created a proxy server that parses GET requests from the client and sends back to the client the results from the HTTP request from the web servers.
 
@@ -38,7 +38,6 @@ GET http://www.google.com HTTP/1.0
 - If correctly specified, open another socket and send the request to the actual HTTP webserver
 - Proxy server will listen for a response, then it will send back the response back to the client
 
-
 #### open_port(int port)
 - Same function from previous assignments. Basically build/opens a socket and binds the port to it on localhost
 - Listens for any connects onto the socket, if there is, then it will fork to allow multiple connections to the proxy server
@@ -47,7 +46,6 @@ GET http://www.google.com HTTP/1.0
 - String parsing taken from pervious assignments as well
 - Parses for GET, an http in the url path given, and also the http_version
 - If http is in the url and a GET is called, it will send a get_request
-
 
 #### get_request(int sock, char *url, char *http_version, char *request)
 - Does a dnslookup with gethostbyname(url) to get the IP address of the url given.
