@@ -132,7 +132,7 @@ int open_port(){
     struct sockaddr_in server , client;
     char DnatRules[BUFFER_SIZE];
 
-    struct sockaddr_storage their_addr;
+    // struct sockaddr_storage their_addr;
     char *port = NULL;
 
     port = "8080"; 
@@ -145,13 +145,13 @@ int open_port(){
     printf("Socket created\n");
      
     //Prepare the sockaddr_in structure
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(atoi(port));
-    bzero(&server.sin_zero, 8);
+    client.sin_family = AF_INET;
+    client.sin_addr.s_addr = INADDR_ANY;
+    client.sin_port = htons(atoi(port));
+    bzero(&client.sin_zero, 8);
      
     //Bind socket to address
-    if( bind(sockfd,(struct sockaddr *)&server , sizeof(server)) < 0)
+    if( bind(sockfd,(struct sockaddr *)&client , sizeof(client)) < 0)
     {
         perror("bind failed. Error");
         return 1;
@@ -170,10 +170,10 @@ int open_port(){
     ioctl(fd, SIOCGIFADDR, &ifr);
     close(fd);
 
-    sprintf(DnatRules, "iptables -t nat -A PREROUTING -p tcp -i eth1 -j DNAT --to %s:%d", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr), ntohs(server.sin_port));
+    sprintf(DnatRules, "iptables -t nat -A PREROUTING -p tcp -i eth1 -j DNAT --to %s:%d", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr), ntohs(client.sin_port));
     printf("DNAT RULES: %s\n", DnatRules);
     system(DnatRules);
-    printf("\nserver port %d: waiting for connections...\n", ntohs(server.sin_port));
+    printf("\nserver port %d: waiting for connections...\n", ntohs(client.sin_port));
      
     //Accept and incoming connection
     printf("Waiting for incoming connections..\n");
@@ -203,16 +203,6 @@ int open_port(){
     Main function
 */
 int main(int argc, char *argv[]) {
-    // int port;
-
-    // // If no parameter given, send error
-    // // If it is given, then set conf_file to argv[1]
-    // if (argc != 2) {
-    //     fprintf(stderr, "Please give a port number");
-    //     exit(0);
-    // }
-
-    // port = atoi(argv[1]);
 
     open_port();
 
