@@ -46,7 +46,7 @@ int BUFFER_SIZE = 2048;
 */
 void process_request(int sock){
     char buf[BUFFER_SIZE];
-    int server_sock, bytes_sent;
+    int server_sock;
     int read_size = 0;
     int len = 0;
     char snat_rules[BUFFER_SIZE];
