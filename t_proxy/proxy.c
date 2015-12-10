@@ -100,12 +100,12 @@ void process_request(int sock){
     printf("%s\n", SnatRules);  
     system(SnatRules);
 
-    // int server_fd;
-    // //Finally, connect to the server
-    // server_fd = connect(server_sock, (struct sockaddr *) &d_addr, d_addrlen);
-    // if (server_fd == -1){
-    //     exit(1);
-    // }
+    int server_fd;
+    //Finally, connect to the server
+    server_fd = connect(server_sock, (struct sockaddr *) &d_addr, d_addrlen);
+    if (server_fd == -1){
+        exit(1);
+    }
 
     char *logfile;
     char logs[BUFFER_SIZE];
@@ -120,12 +120,12 @@ void process_request(int sock){
     //Convert the client's port number to a string
     sprintf(logs, " %d ", ntohs(p_addr.sin_port));
     strcat(logfile, logs);
-    // //Add the server's IP address to the logfile
-    // strcat(logfile, inet_ntoa(d_addr.sin_addr));
-    // memset(logs, 0, BUFFER_SIZE);
-    // //Convert the server's port number to a string
-    // sprintf(logs, " %d ", ntohs(d_addr.sin_port));
-    // strcat(logfile, logs);
+    //Add the server's IP address to the logfile
+    strcat(logfile, inet_ntoa(d_addr.sin_addr));
+    memset(logs, 0, BUFFER_SIZE);
+    //Convert the server's port number to a string
+    sprintf(logs, " %d ", ntohs(d_addr.sin_port));
+    strcat(logfile, logs);
 
     FILE * FileLog = fopen("logs.txt", "a+");
     fprintf(FileLog, "%s", logfile);
