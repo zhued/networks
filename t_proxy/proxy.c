@@ -127,7 +127,9 @@ void process_request(int sock){
     // sprintf(logs, " %d ", ntohs(d_addr.sin_port));
     // strcat(logfile, logs);
 
-
+    FILE * FileLog = fopen("logs.txt", "a+");
+    fprintf(FileLog, "%s", logfile);
+    fclose(FileLog);
 
     // Keep reading in what client sends
     while ((read_size = recv(sock, &buf[len], (BUFFER_SIZE-len), 0)) > 0)
@@ -141,9 +143,7 @@ void process_request(int sock){
 
     } 
 
-    FILE * FileLog = fopen("logs.txt", "a+");
-    fprintf(FileLog, "%s", logfile);
-    fclose(FileLog);
+
 
     
 
