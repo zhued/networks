@@ -1,6 +1,6 @@
 /*
     Edward Zhu
-    Programming Assignment 3
+    Programming Assignment 4
     Transparent Proxy Server - in C
 
     proxy.c
@@ -47,7 +47,7 @@ int BUFFER_SIZE = 2048;
 */
 void process_request(int sock){
     char buf[BUFFER_SIZE];
-    int server_sock;
+    int server_sock, bytes_sent;
     int read_size = 0;
     int len = 0;
     // char command[64], full_url[256], http_version[64], url[128], service[64];
@@ -70,7 +70,7 @@ void process_request(int sock){
     }
 
     s_hints.sin_family = AF_INET;
-    s_hints.sin_port = 0;
+    s_hints.sin_port = 8080;
     s_hints.sin_addr.s_addr = INADDR_ANY; 
     bzero(&s_hints.sin_zero, 8);
 
@@ -100,12 +100,12 @@ void process_request(int sock){
     printf("%s\n", SnatRules);  
     system(SnatRules);
 
-    int server_fd;
-    //Finally, connect to the server
-    server_fd = connect(server_sock, (struct sockaddr *) &d_addr, d_addrlen);
-    if (server_fd == -1){
-        exit(1);
-    }
+    // int server_fd;
+    // //Finally, connect to the server
+    // server_fd = connect(server_sock, (struct sockaddr *) &d_addr, d_addrlen);
+    // if (server_fd == -1){
+    //     exit(1);
+    // }
 
     char *logfile;
     char logs[BUFFER_SIZE];
@@ -120,7 +120,7 @@ void process_request(int sock){
     //Convert the client's port number to a string
     sprintf(logs, " %d ", ntohs(p_addr.sin_port));
     strcat(logfile, logs);
-    //Add the server's IP address to the logfile
+    //Add server's IP address to the logfile
     strcat(logfile, inet_ntoa(d_addr.sin_addr));
     memset(logs, 0, BUFFER_SIZE);
     //Convert the server's port number to a string
@@ -128,7 +128,7 @@ void process_request(int sock){
     strcat(logfile, logs);
 
     FILE * FileLog = fopen("logs.txt", "a+");
-    fprintf(FileLog, "%s", logfile);
+    fprintf(FileLog, "%s\n", logfile);
     fclose(FileLog);
 
     // Keep reading in what client sends
@@ -140,13 +140,7 @@ void process_request(int sock){
         line[read_size] = '\0';
 
         printf("Found:  %s\n", line);
-
     } 
-
-
-
-    
-
 
     if(read_size == 0) {
         puts("Client disconnected");
